@@ -1,4 +1,5 @@
 module CoxPH (
+  CoxPHConvergenceFailure(..),
   Delta(..),
   coxph
   ) where
@@ -9,7 +10,9 @@ data Delta = ObservedEvent | Censored
 
 -- type Vec2DimDouble = V.Vector (V.Vector Double)
 
-newtype CoxPHResult = CoxPHResult (V.Vector Double)
+data CoxPHConvergenceFailure = CoxPHConvergenceFailure
+
+type CoxPHResult = Either CoxPHConvergenceFailure (V.Vector Double)
 
 coxph :: V.Vector Double -> V.Vector Delta -> V.Vector (V.Vector Double) -> CoxPHResult
-coxph _ _ _ = CoxPHResult (V.fromList [])
+coxph _ _ _ = Right (V.fromList [])
