@@ -72,11 +72,12 @@ coxph _ -- time
 --     isNothing Nothing -> True
 --     isNothing _ -> False
 
-calcWeightedMeans :: V.Vector (VU.Vector Double)
+calcWeightedMeans :: Double
+                  -> V.Vector (VU.Vector Double)
                   -> VU.Vector Double
                   -> V.Vector ScaleCovariateIndicator
                   -> Either Text (VU.Vector Double)
-calcWeightedMeans xDesignMatrix cweights scaleIndicators = do
+calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators = do
   let covariatePairs = V.zip xDesignMatrix scaleIndicators
   let vecEitherMeans = V.map (conditionallyCalcMean weights) covariatePairs
   if V.any isRight vecEitherMeans
@@ -87,12 +88,47 @@ calcWeightedMeans xDesignMatrix cweights scaleIndicators = do
                           -> (VU.Vector Double, ScaleCovariateIndicator)
                           -> Either Text Double
     conditionallyCalcMean _ (_, ScaleCovariateNo) = Right 0
-    conditionallyCalcMean weights (x, ScaleCovariateYes) = calcWeightedMean x weights
+    conditionallyCalcMean weights (x, ScaleCovariateYes) = calcWeightedMean x weights sumWeights
 
 calcWeightedMean :: VU.Vector Double
                  -> VU.Vector Double
+                 -> Double
                  -> Either Text Double
-calcWeightedMean x weights =
+calcWeightedMean x weights sumWeights =
+  if VU.length x == 0
+  then Left "Can't take the mean of a length-0 vector"
+  else if sumWeights == 0
+       then Left "Can't take the mean when the weights sum to 0"
+       else let sumCovs = VU.foldl op 0 (VU.zip x weights)
+            in Right (sumCovs / sumWeights)
+  where
+    op :: Double -> (Double, Double) -> Double
+    op sumCovs (covVal, weightVal) = sumCovs + covVal * weightVal
+
+
+-- Possibly don't need ---------------------------------------------------------
+
+calcWeightedMeans2 :: V.Vector (VU.Vector Double)
+                  -> VU.Vector Double
+                  -> V.Vector ScaleCovariateIndicator
+                  -> Either Text (VU.Vector Double)
+calcWeightedMeans2 xDesignMatrix weights scaleIndicators = do
+  let covariatePairs = V.zip xDesignMatrix scaleIndicators
+  let vecEitherMeans = V.map (conditionallyCalcMean weights) covariatePairs
+  if V.any isRight vecEitherMeans
+  then Left "There was an error"  -- TODO: need to make this better
+  else Right (VU.convert (V.map (fromRight 0) vecEitherMeans))
+  where
+    conditionallyCalcMean :: VU.Vector Double
+                          -> (VU.Vector Double, ScaleCovariateIndicator)
+                          -> Either Text Double
+    conditionallyCalcMean _ (_, ScaleCovariateNo) = Right 0
+    conditionallyCalcMean weights (x, ScaleCovariateYes) = calcWeightedMean2 x weights
+
+calcWeightedMean2 :: VU.Vector Double
+                 -> VU.Vector Double
+                 -> Either Text Double
+calcWeightedMean2 x weights =
   if VU.length x == 0
   then Left "Can't take the mean of a length-0 vector"
   else let (sumCovs, sumWeights) = VU.foldl op (0, 0) (VU.zip x weights)
