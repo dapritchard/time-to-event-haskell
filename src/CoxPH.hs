@@ -1,11 +1,13 @@
 module CoxPH (
   CoxPHConvergenceFailure(..),
+  CoxPHMethod(..),
   Delta(..),
+  LastInStrataIndicator(..),
+  ScaleCovariateIndicator(..),
   coxph
   ) where
 
 import qualified Data.Vector.Unboxed as V
-import System.Timeout (timeout)
 
 data Delta = ObservedEvent | Censored
 
@@ -31,6 +33,7 @@ coxph :: V.Vector Double             -- the per-subject minumums of the event or
       -> V.Vector ScaleCovariateIndicator
       -> CoxPHMethod
       -> Integer
+      -> Double
       -> Double
       -> CoxPHResult
 coxph _ -- time
