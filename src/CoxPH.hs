@@ -94,13 +94,12 @@ calcWeightedMean :: VU.Vector Double
                  -> VU.Vector Double
                  -> Double
                  -> Either Text Double
-calcWeightedMean x weights sumWeights =
-  if VU.length x == 0
-  then Left "Can't take the mean of a length-0 vector"
-  else if sumWeights == 0
-       then Left "Can't take the mean when the weights sum to 0"
-       else let sumCovs = VU.foldl op 0 (VU.zip x weights)
-            in Right (sumCovs / sumWeights)
+calcWeightedMean x weights sumWeights
+  | VU.length x == 0 = Left "Can't take the mean of a length-0 vector"
+  | sumWeights == 0 = Left "Can't take the mean when the weights sum to 0"
+  | otherwise =
+    let sumCovs = VU.foldl op 0 (VU.zip x weights)
+    in  Right (sumCovs / sumWeights)
   where
     op :: Double -> (Double, Double) -> Double
     op sumCovs (covVal, weightVal) = sumCovs + covVal * weightVal
