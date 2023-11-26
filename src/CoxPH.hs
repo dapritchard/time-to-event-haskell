@@ -47,5 +47,13 @@ coxph _ -- time
       _ -- method
       _ -- maxIterations
       _ -- epsilon
-      _ = -- tolerance
+      _ = do -- tolerance
   Right (V.fromList [])
+
+calcVecMean :: V.Vector Double -> Either CoxPHConvergenceFailure Double
+calcVecMean x =
+  if lengthX == 0
+  then Left CoxPHConvergenceFailure
+  else Right (V.sum x / fromIntegral lengthX)
+  where
+    lengthX = V.length x
