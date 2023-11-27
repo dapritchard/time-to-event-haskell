@@ -72,6 +72,23 @@ coxph _ -- time
 --     isNothing Nothing -> True
 --     isNothing _ -> False
 
+centerAndScaleCov :: VU.Vector Double
+                  -> VU.Vector Double
+                  -> Double
+                  -> Double
+                  -> Either Text (VU.Vector Double, Double)
+centerAndScaleCov x weights mean sumWeights =
+  let xCentered = VU.map (subtract mean) x
+      covariatePairs = VU.zip xCentered weights
+      weightedAbsCovSum = VU.foldl calcAbsProd 0 covariatePairs
+  in  if weightedAbsCovSum == 0
+      then Left "Constant column"
+      else let scaleVal = weightedAbsCovSum / sumWeights
+           in  Right (VU.map (* scaleVal) xCentered, scaleVal)
+  where
+    calcAbsProd :: Double -> (Double, Double) -> Double
+    calcAbsProd sumVal (xVal, weightVal) = sumVal + abs (xVal * weightVal)
+
 calcWeightedMeans :: Double
                   -> V.Vector (VU.Vector Double)
                   -> VU.Vector Double
@@ -79,16 +96,17 @@ calcWeightedMeans :: Double
                   -> Either Text (VU.Vector Double)
 calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators = do
   let covariatePairs = V.zip xDesignMatrix scaleIndicators
-  let vecEitherMeans = V.map (conditionallyCalcMean weights) covariatePairs
+  let vecEitherMeans = V.map (conditionallyCalcWeightedMean weights)
+                             covariatePairs
   if V.any isRight vecEitherMeans
   then Left "There was an error"  -- TODO: need to make this better
   else Right (VU.convert (V.map (fromRight 0) vecEitherMeans))
   where
-    conditionallyCalcMean :: VU.Vector Double
+    conditionallyCalcWeightedMean :: VU.Vector Double
                           -> (VU.Vector Double, ScaleCovariateIndicator)
                           -> Either Text Double
-    conditionallyCalcMean _ (_, ScaleCovariateNo) = Right 0
-    conditionallyCalcMean weights (x, ScaleCovariateYes) = calcWeightedMean x weights sumWeights
+    conditionallyCalcWeightedMean _ (_, ScaleCovariateNo) = Right 0
+    conditionallyCalcWeightedMean weights (x, ScaleCovariateYes) = calcWeightedMean x weights sumWeights
 
 calcWeightedMean :: VU.Vector Double
                  -> VU.Vector Double
