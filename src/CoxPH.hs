@@ -13,7 +13,7 @@ module CoxPH (
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector as V
 -- import Data.Maybe (fromMaybe)
-import Data.Either (fromRight, isRight)
+import Data.Either (fromRight, isLeft, isRight)
 
 import Data.Text (Text)
 
@@ -59,18 +59,23 @@ coxph _ -- time
       _ = do -- tolerance
   Right (VU.fromList [])
 
--- centerAndScale :: VU.Vector (VU.Vector Double)
---                -> VU.Vector ScaleCovariateIndicator
---                -> Either Text VU.Vector (VU.Vector Double)
--- centerAndScale xDesignMatrix scaleIndicators = do
---   let vecMaybeMeans = VU.map calcWeightedMean xDesignMatrix
---   vecMeans <- if VU.any isNothing vecMeans
---               then Left "Had a length-0 vector"
---               else
---   where
---     isNothing :: Maybe -> Bool
---     isNothing Nothing -> True
---     isNothing _ -> False
+centerAndScaleCovs :: V.Vector (VU.Vector Double)
+                   -> VU.Vector Double
+                   -> V.Vector ScaleCovariateIndicator
+                   -> Either Text (V.Vector (VU.Vector Double, Double))
+centerAndScaleCovs xDesignMatrix weights scaleIndicators = do
+  let sumWeights = VU.sum weights
+  weightedMeans <- calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators
+  let temp = V.zip4 xDesignMatrix
+                    (V.singleton weights)
+                    (V.convert weightedMeans)
+                    (V.singleton sumWeights) :: V.Vector (VU.Vector Double, VU.Vector Double, Double, Double)
+      temp2 = V.map (uncurry4 centerAndScaleCov) temp :: V.Vector (Either Text (VU.Vector Double, Double))
+  if V.any isLeft temp2
+  then Left "todo better error message"
+  else Right $ V.map (fromRight (VU.singleton 0, 0)) temp2
+  where
+    uncurry4 f (w, x, y, z) = f w x y z
 
 centerAndScaleCov :: VU.Vector Double
                   -> VU.Vector Double
@@ -123,40 +128,40 @@ calcWeightedMean x weights sumWeights
     op sumCovs (covVal, weightVal) = sumCovs + covVal * weightVal
 
 
--- Possibly don't need ---------------------------------------------------------
+-- -- Possibly don't need ---------------------------------------------------------
 
-calcWeightedMeans2 :: V.Vector (VU.Vector Double)
-                  -> VU.Vector Double
-                  -> V.Vector ScaleCovariateIndicator
-                  -> Either Text (VU.Vector Double)
-calcWeightedMeans2 xDesignMatrix weights scaleIndicators = do
-  let covariatePairs = V.zip xDesignMatrix scaleIndicators
-  let vecEitherMeans = V.map (conditionallyCalcMean weights) covariatePairs
-  if V.any isRight vecEitherMeans
-  then Left "There was an error"  -- TODO: need to make this better
-  else Right (VU.convert (V.map (fromRight 0) vecEitherMeans))
-  where
-    conditionallyCalcMean :: VU.Vector Double
-                          -> (VU.Vector Double, ScaleCovariateIndicator)
-                          -> Either Text Double
-    conditionallyCalcMean _ (_, ScaleCovariateNo) = Right 0
-    conditionallyCalcMean weights (x, ScaleCovariateYes) = calcWeightedMean2 x weights
+-- calcWeightedMeans2 :: V.Vector (VU.Vector Double)
+--                   -> VU.Vector Double
+--                   -> V.Vector ScaleCovariateIndicator
+--                   -> Either Text (VU.Vector Double)
+-- calcWeightedMeans2 xDesignMatrix weights scaleIndicators = do
+--   let covariatePairs = V.zip xDesignMatrix scaleIndicators
+--   let vecEitherMeans = V.map (conditionallyCalcMean weights) covariatePairs
+--   if V.any isRight vecEitherMeans
+--   then Left "There was an error"  -- TODO: need to make this better
+--   else Right (VU.convert (V.map (fromRight 0) vecEitherMeans))
+--   where
+--     conditionallyCalcMean :: VU.Vector Double
+--                           -> (VU.Vector Double, ScaleCovariateIndicator)
+--                           -> Either Text Double
+--     conditionallyCalcMean _ (_, ScaleCovariateNo) = Right 0
+--     conditionallyCalcMean weights (x, ScaleCovariateYes) = calcWeightedMean2 x weights
 
-calcWeightedMean2 :: VU.Vector Double
-                 -> VU.Vector Double
-                 -> Either Text Double
-calcWeightedMean2 x weights =
-  if VU.length x == 0
-  then Left "Can't take the mean of a length-0 vector"
-  else let (sumCovs, sumWeights) = VU.foldl op (0, 0) (VU.zip x weights)
-       in  if sumWeights == 0
-           then Left "Can't take the mean when the weights sum to 0"
-           else Right (sumCovs / sumWeights)
-  where
-    op :: (Double, Double) -> (Double, Double) -> (Double, Double)
-    op (sumCovs, sumWeights) (covVal, weightVal) =
-      (sumCovs + covVal * weightVal, sumWeights + weightVal)
+-- calcWeightedMean2 :: VU.Vector Double
+--                  -> VU.Vector Double
+--                  -> Either Text Double
+-- calcWeightedMean2 x weights =
+--   if VU.length x == 0
+--   then Left "Can't take the mean of a length-0 vector"
+--   else let (sumCovs, sumWeights) = VU.foldl op (0, 0) (VU.zip x weights)
+--        in  if sumWeights == 0
+--            then Left "Can't take the mean when the weights sum to 0"
+--            else Right (sumCovs / sumWeights)
+--   where
+--     op :: (Double, Double) -> (Double, Double) -> (Double, Double)
+--     op (sumCovs, sumWeights) (covVal, weightVal) =
+--       (sumCovs + covVal * weightVal, sumWeights + weightVal)
 
-calcUnsafeVecMean :: VU.Vector Double -> Double
-calcUnsafeVecMean x =
-  VU.sum x / fromIntegral (VU.length x)
+-- calcUnsafeVecMean :: VU.Vector Double -> Double
+-- calcUnsafeVecMean x =
+--   VU.sum x / fromIntegral (VU.length x)
