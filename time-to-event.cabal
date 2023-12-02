@@ -36,5 +36,10 @@ test-suite time-to-event-test
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
+        HUnit-approx,
         base >= 4.14,
-        time-to-event
+        tasty,
+        tasty-hunit,
+        text >= 2,
+        time-to-event,
+        vector ^>= 0.13

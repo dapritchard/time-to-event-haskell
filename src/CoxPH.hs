@@ -7,14 +7,13 @@ module CoxPH (
   Delta(..),
   LastInStrataIndicator(..),
   ScaleCovariateIndicator(..),
+  centerAndScaleCovs,
   coxph
   ) where
 
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector as V
--- import Data.Maybe (fromMaybe)
 import Data.Either (fromRight, isLeft, isRight)
-
 import Data.Text (Text)
 
 data Delta = ObservedEvent | Censored
@@ -59,6 +58,7 @@ coxph _ -- time
       _ = do -- tolerance
   Right (VU.fromList [])
 
+-- TODO: include checks that the lengths of the various vectors are consistent?
 centerAndScaleCovs :: V.Vector (VU.Vector Double)
                    -> VU.Vector Double
                    -> V.Vector ScaleCovariateIndicator
