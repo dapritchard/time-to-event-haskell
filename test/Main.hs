@@ -71,15 +71,15 @@ actualConstWeights = centerAndScaleCovs covs constWeights scaleIndicators
 expectedConstWeights :: Either Text (V.Vector (VU.Vector Double, Double))
 expectedConstWeights =
   let newX1 = VU.fromList
-        [ -1.66666666666667
+        [ -1.6666666666666665
         , -1
-        , -0.333333333333333
-        , 0.333333333333333
-        , 1
-        , 1.66666666666667
+        , -0.3333333333333333
+        ,  0.3333333333333333
+        ,  1
+        ,  1.6666666666666665
         ]
       expected = V.fromList
-        [ (newX1, 0.666666666666667)
+        [ (newX1, 0.6666666666666666)
         , (x2, 1)
         ]
   in  Right expected
@@ -90,9 +90,15 @@ actualNonConstWeights = centerAndScaleCovs covs nonConstWeights scaleIndicators
 expectedNonConstWeights :: Either Text (V.Vector (VU.Vector Double, Double))
 expectedNonConstWeights =
   let newX1 = VU.fromList
-        [ -2.625, -1.837, -1.050, -0.262,  0.525,  1.313]
+        [ -2.6250000000000000
+        , -1.8374999999999999
+        , -1.0499999999999998
+        , -0.2624999999999998
+        ,  0.5250000000000002
+        ,  1.3125000000000004
+        ]
       expected = V.fromList
-        [ (newX1, 0.7875)
+        [ (newX1, 0.7875000000000001 )
         , (x2, 1)
         ]
   in  Right expected
