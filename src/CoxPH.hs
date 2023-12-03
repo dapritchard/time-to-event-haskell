@@ -13,7 +13,7 @@ module CoxPH (
 
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector as V
-import Data.Either (fromRight, isLeft, isRight)
+import Data.Either (fromRight, isLeft)
 import Data.Text (Text)
 
 data Delta = ObservedEvent | Censored
@@ -64,18 +64,23 @@ centerAndScaleCovs :: V.Vector (VU.Vector Double)
                    -> V.Vector ScaleCovariateIndicator
                    -> Either Text (V.Vector (VU.Vector Double, Double))
 centerAndScaleCovs xDesignMatrix weights scaleIndicators = do
-  let sumWeights = VU.sum weights
+  let nCovs = length xDesignMatrix
+      sumWeights = VU.sum weights
   weightedMeans <- calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators
-  let temp = V.zip4 xDesignMatrix
-                    (V.singleton weights)
-                    (V.convert weightedMeans)
-                    (V.singleton sumWeights) :: V.Vector (VU.Vector Double, VU.Vector Double, Double, Double)
-      temp2 = V.map (uncurry4 centerAndScaleCov) temp :: V.Vector (Either Text (VU.Vector Double, Double))
-  if V.any isLeft temp2
-  then Left "todo better error message"
-  else Right $ V.map (fromRight (VU.singleton 0, 0)) temp2
+  let covTuples = V.zip5 xDesignMatrix
+                         (V.replicate nCovs weights)
+                         (V.convert weightedMeans)
+                         (V.replicate nCovs sumWeights)
+                         scaleIndicators
+      eitherResults = V.map conditionallyCenterAndScaleCov covTuples
+  if V.any isLeft eitherResults
+  then Left "todo better error message" -- FIXME
+  else Right $ V.map (fromRight (VU.singleton 0, 0)) eitherResults
   where
-    uncurry4 f (w, x, y, z) = f w x y z
+    conditionallyCenterAndScaleCov (x, _, _, _, ScaleCovariateNo) =
+      Right (x, 1)
+    conditionallyCenterAndScaleCov (x, weights, mean, sumWeights, ScaleCovariateYes) =
+      centerAndScaleCov x weights mean sumWeights
 
 centerAndScaleCov :: VU.Vector Double
                   -> VU.Vector Double
@@ -88,7 +93,7 @@ centerAndScaleCov x weights mean sumWeights =
       weightedAbsCovSum = VU.foldl calcAbsProd 0 covariatePairs
   in  if weightedAbsCovSum == 0
       then Left "Constant column"
-      else let scaleVal = weightedAbsCovSum / sumWeights
+      else let scaleVal = sumWeights / weightedAbsCovSum
            in  Right (VU.map (* scaleVal) xCentered, scaleVal)
   where
     calcAbsProd :: Double -> (Double, Double) -> Double
@@ -103,15 +108,16 @@ calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators = do
   let covariatePairs = V.zip xDesignMatrix scaleIndicators
   let vecEitherMeans = V.map (conditionallyCalcWeightedMean weights)
                              covariatePairs
-  if V.any isRight vecEitherMeans
+  if V.any isLeft vecEitherMeans
   then Left "There was an error"  -- TODO: need to make this better
   else Right (VU.convert (V.map (fromRight 0) vecEitherMeans))
   where
     conditionallyCalcWeightedMean :: VU.Vector Double
-                          -> (VU.Vector Double, ScaleCovariateIndicator)
-                          -> Either Text Double
+                                  -> (VU.Vector Double, ScaleCovariateIndicator)
+                                  -> Either Text Double
     conditionallyCalcWeightedMean _ (_, ScaleCovariateNo) = Right 0
-    conditionallyCalcWeightedMean weights (x, ScaleCovariateYes) = calcWeightedMean x weights sumWeights
+    conditionallyCalcWeightedMean weights (x, ScaleCovariateYes) =
+      calcWeightedMean x weights sumWeights
 
 calcWeightedMean :: VU.Vector Double
                  -> VU.Vector Double
