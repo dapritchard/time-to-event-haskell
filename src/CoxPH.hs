@@ -58,12 +58,17 @@ coxph _ -- time
       _ = do -- tolerance
   Right (VU.fromList [])
 
+{- | Conditionally center and scale a design matrix
+-}
+centerAndScaleCovs :: V.Vector (VU.Vector Double)
+                   -- ^ The covariate vectors comprising the design matrix. The covariate vectors are required to all be the same length.
+                   -> VU.Vector Double
+                   -- ^ The subject weights. It is required that the length of this vector is equal to the length of each of the vectors in the design matrix.
+                   -> V.Vector ScaleCovariateIndicator
+                   -- ^ Indicators for whether each of the covariates should be centered and scaled. It is required that the length of this vector is equal to the number of vectors in the design matrix.
+                   -> Either T.Text (V.Vector (VU.Vector Double, Double))
 -- The error handling could be improved to (i) list all of the errors and (ii)
 -- to list the indices of the failing vectors
-centerAndScaleCovs :: V.Vector (VU.Vector Double)
-                   -> VU.Vector Double
-                   -> V.Vector ScaleCovariateIndicator
-                   -> Either T.Text (V.Vector (VU.Vector Double, Double))
 centerAndScaleCovs xDesignMatrix weights scaleIndicators =
   let nCovs = V.length xDesignMatrix
       nScaleIndicators = V.length scaleIndicators
