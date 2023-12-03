@@ -63,19 +63,23 @@ centerAndScaleCovs :: V.Vector (VU.Vector Double)
                    -> VU.Vector Double
                    -> V.Vector ScaleCovariateIndicator
                    -> Either Text (V.Vector (VU.Vector Double, Double))
-centerAndScaleCovs xDesignMatrix weights scaleIndicators = do
+centerAndScaleCovs xDesignMatrix weights scaleIndicators =
   let nCovs = length xDesignMatrix
+      nScaleIndicators = length scaleIndicators
       sumWeights = VU.sum weights
-  weightedMeans <- calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators
-  let covTuples = V.zip5 xDesignMatrix
-                         (V.replicate nCovs weights)
-                         (V.convert weightedMeans)
-                         (V.replicate nCovs sumWeights)
-                         scaleIndicators
-      eitherResults = V.map conditionallyCenterAndScaleCov covTuples
-  if V.any isLeft eitherResults
-  then Left "todo better error message" -- FIXME
-  else Right $ V.map (fromRight (VU.singleton 0, 0)) eitherResults
+  in if nCovs /= nScaleIndicators
+     then Left "The length of first input is not the same as the length of the third input"
+     else do
+       weightedMeans <- calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators
+       let covTuples = V.zip5 xDesignMatrix
+                             (V.replicate nCovs weights)
+                             (V.convert weightedMeans)
+                             (V.replicate nCovs sumWeights)
+                             scaleIndicators
+           eitherResults = V.map conditionallyCenterAndScaleCov covTuples
+       if V.any isLeft eitherResults
+       then Left "Not all covariates where able to be centered and scaled"
+       else Right $ V.map (fromRight (VU.singleton 0, 0)) eitherResults
   where
     conditionallyCenterAndScaleCov (x, _, _, _, ScaleCovariateNo) =
       Right (x, 1)
