@@ -17,7 +17,10 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  CoxPH
+    exposed-modules:
+        CoxPH
+      , CoxPH.CenterAndScale
+      , CoxPH.Data
     -- other-modules:
     -- other-extensions:
     build-depends:

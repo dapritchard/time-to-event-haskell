@@ -3,12 +3,13 @@
 module Main (main) where
 
 import Control.Monad ( unless )
-import qualified Data.Vector.Unboxed as VU
-import qualified Data.Vector as V
+import CoxPH.CenterAndScale
+import CoxPH.Data
+import Data.Vector.Unboxed qualified as VU
+import Data.Vector qualified as V
 import Data.Text (Text)
 import Test.Tasty ( TestTree, defaultMain, testGroup )
 import Test.Tasty.HUnit ( Assertion, testCase, (@?=), assertFailure )
-import CoxPH
 
 main :: IO ()
 main = defaultMain unitTests
