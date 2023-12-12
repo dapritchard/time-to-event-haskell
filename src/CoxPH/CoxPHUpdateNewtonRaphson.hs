@@ -8,19 +8,12 @@ import CoxPH.Data
 import Numeric.LinearAlgebra qualified as L -- (Matrix, Vector, fromColumns)
 import Numeric.LinearAlgebra ( (!), (#>), Matrix, Vector, add, diag, outer, scale, fromColumns )
 import Data.Vector.Storable qualified as VS
-import Data.Vector.Unboxed qualified as VU
 import Data.Vector qualified as V
 
 updateNewtonRaphson :: [StrataData] -> VS.Vector Double -> Vector Double -> ()
 updateNewtonRaphson strataDatas weights beta =
   -- let z = add ()
   ()
-
-updateStrata :: StrataData -> VS.Vector Double -> Vector Double -> ()
-updateStrata strataData weights beta =
-  let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
-      -- risk =
-  in  ()
 -- updateTime
 
 -- data TTEData = TTEData {
@@ -39,6 +32,7 @@ data StrataData = StrataData {
   , eventStatus :: V.Vector Delta
   , xDesignMatrix :: Matrix Double
   , xOffset :: Vector Double
+  , weights :: Vector Double
   }
 
 data OverallData = OverallData {
@@ -57,6 +51,17 @@ data TiedData = TiedData {
   , xBarUnscaled :: Vector Double
   , informationTerm1 :: Matrix Double
   }
+
+updateStrata
+  :: Vector Double
+  -> StrataData
+  -> IterationInfo
+  -> OverallData
+  -> (IterationInfo, OverallData)
+updateStrata beta strataData iterationInfo overallData =
+  let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
+      weightedRisk = VS.zipWith (*) strataData.weights xProdBeta
+  in  calcTimeBlock strataData iterationInfo weightedRisk overallData
 
 calcTimeBlock
   :: StrataData
