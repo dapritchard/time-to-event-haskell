@@ -15,6 +15,8 @@ extra-doc-files:    CHANGELOG.md
 common warnings
     ghc-options: -Wall
 
+-- `ExplicitNamespaces` is added to correct the minor inconsistency mentioned at
+-- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/control.html#extension-GHC2021
 common extensions
     default-extensions:
         ExplicitNamespaces
@@ -28,6 +30,7 @@ library
       , CoxPH.CenterAndScale
       , CoxPH.CoxPHUpdateNewtonRaphson
       , CoxPH.Data
+      , CoxPH.OrderByStrata
     -- other-modules:
     -- other-extensions:
     build-depends:
@@ -35,6 +38,7 @@ library
       , hmatrix ^>= 0.20
       , text >= 2
       , vector ^>= 0.13
+      , vector-algorithms ^>= 0.9
     hs-source-dirs:   src
     default-language: GHC2021
 
