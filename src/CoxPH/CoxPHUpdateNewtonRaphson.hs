@@ -63,32 +63,18 @@ calcTimeBlock
   -> IterationInfo
   -> Vector Double
   -> OverallData
-  -- -> TiedData
   -> (IterationInfo, OverallData)
--- calcTimeBlock strataData iterationInfo weightedRisk overallData tiedData
 calcTimeBlock strataData iterationInfo weightedRisk overallData =
   let p = VS.length overallData.score
-      tiedData = TiedData {
-        sumWeights = 0
-        , sumWeightedRisk = 0
-        , logLikelihood = 0
-        , score = VS.replicate p 0
-        , xBarUnscaled = VS.replicate p 0
-        , informationTerm1 = createEmptyMatrix p
-        }
+      initialTiedData = createInitialTiedData p
       (newIterationInfo, newOverallData, newTiedData) =
         calcSubject
-          strataData iterationInfo weightedRisk overallData newTiedData
-      -- newSumWeightedRisk = newOverallData.sumWeightedRisk + newTiedData.sumWeightedRisk
-      -- newLogLikelihood = newOverallData.logLikelihood - (newTiedData.sumWeights * log newTiedData.logLikelihood)
+          strataData iterationInfo weightedRisk overallData initialTiedData
       newXBarUnscaled = newOverallData.xBarUnscaled + newTiedData.xBarUnscaled
       newXBar = scale newTiedData.sumWeights newXBarUnscaled
-      -- newScore = add newOverallData.score
-      --                (scale newTiedData.sumWeights newXBar)
-      -- newInformationTerm1 = add newOverallData.informationTerm1
-      --                           newTiedData.informationTerm1
-      updatedOverallData = {
-          sumWeightedRisk = newOverallData.sumWeightedRisk + newTiedData.sumWeightedRisk
+      updatedOverallData = OverallData {
+          sumWeightedRisk = newOverallData.sumWeightedRisk
+                            + newTiedData.sumWeightedRisk
         , logLikelihood = newOverallData.logLikelihood
                           - (newTiedData.sumWeights
                              * log newTiedData.logLikelihood)
@@ -177,6 +163,17 @@ m = fromColumns [v1, v2]
 
 -- testResult :: Vector Double
 -- testResult =  testMatrix #> testVector
+
+createInitialTiedData :: Int -> TiedData
+createInitialTiedData p
+  = TiedData {
+        sumWeights = 0
+      , sumWeightedRisk = 0
+      , logLikelihood = 0
+      , score = VS.replicate p 0
+      , xBarUnscaled = VS.replicate p 0
+      , informationTerm1 = createEmptyMatrix p
+      }
 
 createEmptyMatrix :: Int -> Matrix Double
 createEmptyMatrix p = diag (VS.replicate p 0)
