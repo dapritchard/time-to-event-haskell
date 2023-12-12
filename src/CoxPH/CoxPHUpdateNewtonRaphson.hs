@@ -68,7 +68,7 @@ calcTimeBlock strataData iterationInfo weightedRisk overallData =
   let p = VS.length overallData.score
       initialTiedData = createInitialTiedData p
       (newIterationInfo, newOverallData, newTiedData) =
-        calcSubject
+        calcTimeBlockSubjects
           strataData iterationInfo weightedRisk overallData initialTiedData
       newXBarUnscaled = newOverallData.xBarUnscaled + newTiedData.xBarUnscaled
       newXBar = scale newTiedData.sumWeights newXBarUnscaled
@@ -84,16 +84,16 @@ calcTimeBlock strataData iterationInfo weightedRisk overallData =
         , informationTerm1 = add newOverallData.informationTerm1
                                  newTiedData.informationTerm1
         }
-  in  (newIterationInfo, updatedOverallData)
+  in  (newIterationInfo, updatedOverallData) -- FIXME: need to update information
 
-calcSubject
+calcTimeBlockSubjects
   :: StrataData
   -> IterationInfo
   -> Vector Double
   -> OverallData
   -> TiedData
   -> (IterationInfo, OverallData, TiedData)
-calcSubject strataData iterationInfo weightedRisk overallData tiedData
+calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
   | (iterationInfo.subjectIndex >= iterationInfo.nSubjects)
@@ -109,8 +109,8 @@ calcSubject strataData iterationInfo weightedRisk overallData tiedData
                                       (outer subjectXRow subjectXRow)
       in  case strataData.eventStatus V.! iterationInfo.subjectIndex of
             Censored ->
-              let newOverallData = OverallData {
-                    sumWeightedRisk = overallData.sumWeightedRisk
+              let newOverallData = OverallData
+                    { sumWeightedRisk = overallData.sumWeightedRisk
                                       + subjectWeightedRisk
                     , logLikelihood = overallData.logLikelihood
                     , score = overallData.score
@@ -121,10 +121,15 @@ calcSubject strataData iterationInfo weightedRisk overallData tiedData
                   newIterationInfo = iterationInfo {
                       subjectIndex = iterationInfo.subjectIndex + 1
                     }
-              in  (newIterationInfo, newOverallData, tiedData) -- FIXME recursive call
+              in  calcTimeBlockSubjects
+                    strataData
+                    newIterationInfo
+                    weightedRisk
+                    newOverallData
+                    tiedData
             ObservedEvent ->
               let newTiedData = TiedData {
-                      sumWeights = tiedData.sumWeights + subjectWeightedRisk
+                      sumWeights = tiedData.sumWeights + subjectWeightedRisk -- FIXME: wrong!!
                     , sumWeightedRisk = tiedData.sumWeights
                                         + subjectWeightedRisk
                     , logLikelihood = tiedData.logLikelihood
@@ -138,7 +143,12 @@ calcSubject strataData iterationInfo weightedRisk overallData tiedData
                       nDead = iterationInfo.nDead + 1
                     , subjectIndex = iterationInfo.subjectIndex + 1
                     }
-              in  (newIterationInfo, overallData, newTiedData) -- FIXME recursive call
+              in  calcTimeBlockSubjects
+                    strataData
+                    newIterationInfo
+                    weightedRisk
+                    overallData
+                    newTiedData
 
 -- addSubject :: VS.Vector Double -> Int -> ()
 
