@@ -20,32 +20,34 @@ updateNewtonRaphson strataDatas weights beta =
 
 --   }
 
-data IterationInfo = IterationInfo {
-    nSubjects :: Int
-  , subjectIndex :: Int
-  , nEvents :: Int
+data IterationInfo = IterationInfo
+  { subjectIndex :: Int
   , time :: Double
+  , stratum :: Int
+  , nEvents :: Int
   }
 
-data StrataData = StrataData {
-    time :: VS.Vector Double
+data StrataData = StrataData
+  { time :: VS.Vector Double
   , eventStatus :: V.Vector Delta
   , xDesignMatrix :: Matrix Double
   , xOffset :: Vector Double
+  , stratum :: Vector Int
   , weights :: Vector Double
   , xProdBeta :: Vector Double
+  , tiesMethod :: CoxPHMethod
   }
 
-data OverallData = OverallData {
-    sumWeightedRisk :: Double
+data OverallData = OverallData
+  { sumWeightedRisk :: Double
   , logLikelihood :: Double
   , score :: Vector Double
   , xBarUnscaled :: Vector Double
   , informationTerm1 :: Matrix Double
   }
 
-data TiedData = TiedData {
-    sumWeights :: Double
+data TiedData = TiedData
+  { sumWeights :: Double
   , sumWeightedRisk :: Double
   , logLikelihood :: Double
   , score :: Vector Double
@@ -61,56 +63,91 @@ updateStrata
   -> (IterationInfo, OverallData)
 updateStrata beta strataData iterationInfo overallData =
   let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
-      weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
-  in  calcTimeBlock strataData iterationInfo overallData
-  where
-    calcWeightedRisk :: Double -> Double -> Double
-    calcWeightedRisk w x = w * exp x
+      -- weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
+  in  calcTimeBlocks strataData iterationInfo overallData
+  -- where
+  --   calcWeightedRisk :: Double -> Double -> Double
+  --   calcWeightedRisk w x = w * exp x
 
-calcTimeBlock
+calcTimeBlocks
   :: StrataData
   -> IterationInfo
   -> OverallData
   -> (IterationInfo, OverallData)
-calcTimeBlock strataData iterationInfo overallData =
-  let p = VS.length overallData.score
-      initialTiedData = createInitialTiedData p
-      (newIterationInfo, newOverallData, newTiedData) =
-        calcTimeBlockSubjects
-          strataData iterationInfo overallData initialTiedData
-      newXBarUnscaled = newOverallData.xBarUnscaled + newTiedData.xBarUnscaled
-      newXBar = scale newTiedData.sumWeights newXBarUnscaled
-      updatedOverallData = OverallData {
-          sumWeightedRisk = newOverallData.sumWeightedRisk
-                            + newTiedData.sumWeightedRisk
-        , logLikelihood = newOverallData.logLikelihood
-                          - (newTiedData.sumWeights
-                             * log newTiedData.logLikelihood)
-        , score = add newOverallData.score
-                      (scale newTiedData.sumWeights newXBar)
-        , xBarUnscaled = newXBarUnscaled
-        , informationTerm1 = add newOverallData.informationTerm1
-                                 newTiedData.informationTerm1
-        }
-  in  (newIterationInfo, updatedOverallData) -- FIXME: need to update information
+calcTimeBlocks strataData iterationInfo overallData
+  -- Case: we've either seen all of the subjects or we've found a subject with a
+  -- different stratum. This is the base case
+  | (iterationInfo.subjectIndex < 0)
+      || checkDifferentStrata strataData iterationInfo =
+      (iterationInfo, overallData)
+  -- Case: the current subject is part of the current stratum (note that it
+  -- could be the first subject in the stratum).
+  --
+  -- We calculate and accumulate all
+  -- of the relevant terms for the subject and recursively call
+  -- `calcTimeBlocksSubjects` to conditionally compute the next subject in the
+  -- time block
+  | otherwise =
+      let p = VS.length overallData.score
+          initialTiedData = createInitialTiedData p
+          (newIterationInfo, newOverallData, newTiedData) =
+            calcTimeBlocksSubjects
+              strataData
+              iterationInfo
+              overallData
+              initialTiedData
+      in  case strataData.tiesMethod of
+            Breslow ->
+              let newXBarUnscaled = newOverallData.xBarUnscaled
+                              + newTiedData.xBarUnscaled
+                  -- newXBar = scale newTiedData.sumWeights newXBarUnscaled
+                  -- newLogLikelihood =
+                    -- if
+                  updatedOverallData = OverallData
+                    { sumWeightedRisk = newOverallData.sumWeightedRisk
+                                        + newTiedData.sumWeightedRisk
+                    , logLikelihood = newOverallData.logLikelihood
+                                      - (newTiedData.sumWeights
+                                        * log newTiedData.logLikelihood)
+                    , score = add newOverallData.score
+                                  (scale newTiedData.sumWeights newXBar)
+                    , xBarUnscaled = newXBarUnscaled
+                    , informationTerm1 = add newOverallData.informationTerm1
+                                            newTiedData.informationTerm1
+                    }
+              in  (newIterationInfo, updatedOverallData) -- FIXME: need to update information
+  where
+    computeBreslow
+      :: IterationInfo
+      -> OverallData
+      -> TiedData
+      -> (IterationInfo, OverallData)
+    computeBreslow iterationInfo overallData tiedData
+      | iterationInfo.nEvents == 0 =
+        let newLogLikelihood = overallData.logLikelihood
+                               + tiedData.logLikelihood
+            newOverallData = overallData { logLikelihood = newLoglikelihood }
+        -- in  (overallData { logLikelihood  = newLoglikelihood })
+        in  (iterationInfo, overallData) -- FIXME
 
-calcTimeBlockSubjects
+
+calcTimeBlocksSubjects
   :: StrataData
   -> IterationInfo
   -> OverallData
   -> TiedData
   -> (IterationInfo, OverallData, TiedData)
-calcTimeBlockSubjects strataData iterationInfo overallData tiedData
+calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
   | (iterationInfo.subjectIndex < 0)                             -- FIXME: need to check that we don't cross strata
       || (strataData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
-  -- Case: the current subject is part of the censoring or event tied time block
-  -- (note that it could be the first subject in the block). We calculate and
-  -- accumulate all of the relevant terms for the subject and recursively call
-  -- `calcTimeBlockSubjects` to conditionally compute the next subject in the
-  -- time block
+  -- Case: the current subject is part of the current censoring or event tied
+  -- time block (note that it could be the first subject in the block). We
+  -- calculate and accumulate all of the relevant terms for the subject and
+  -- recursively call `calcTimeBlocksSubjects` to conditionally compute the next
+  -- subject in the time block
   | otherwise =
       let subjectWeight = strataData.weights ! iterationInfo.subjectIndex
           subjectXProdBeta = strataData.xProdBeta ! iterationInfo.subjectIndex
@@ -133,7 +170,7 @@ calcTimeBlockSubjects strataData iterationInfo overallData tiedData
                   newIterationInfo = iterationInfo
                     { subjectIndex = iterationInfo.subjectIndex - 1
                     }
-              in  calcTimeBlockSubjects
+              in  calcTimeBlocksSubjects
                     strataData
                     newIterationInfo
                     newOverallData
@@ -154,7 +191,7 @@ calcTimeBlockSubjects strataData iterationInfo overallData tiedData
                     { nEvents = iterationInfo.nEvents + 1
                     , subjectIndex = iterationInfo.subjectIndex - 1
                     }
-              in  calcTimeBlockSubjects
+              in  calcTimeBlocksSubjects
                     strataData
                     newIterationInfo
                     overallData
@@ -186,8 +223,8 @@ m = fromColumns [v1, v2]
 
 createInitialTiedData :: Int -> TiedData
 createInitialTiedData p
-  = TiedData {
-        sumWeights = 0
+  = TiedData
+      { sumWeights = 0
       , sumWeightedRisk = 0
       , logLikelihood = 0
       , score = VS.replicate p 0
@@ -197,3 +234,8 @@ createInitialTiedData p
 
 createEmptyMatrix :: Int -> Matrix Double
 createEmptyMatrix p = diag (VS.replicate p 0)
+
+checkDifferentStrata :: StrataData -> IterationInfo -> Bool
+checkDifferentStrata strataData iterationInfo =
+  let subjectStratum = strataData.stratum VS.! iterationInfo.subjectIndex
+  in  subjectStratum /= iterationInfo.stratum
