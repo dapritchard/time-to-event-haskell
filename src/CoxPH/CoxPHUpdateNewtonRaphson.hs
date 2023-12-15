@@ -23,7 +23,7 @@ updateNewtonRaphson strataDatas weights beta =
 data IterationInfo = IterationInfo {
     nSubjects :: Int
   , subjectIndex :: Int
-  , nDead :: Int
+  , nEvents :: Int
   , time :: Double
   }
 
@@ -33,6 +33,7 @@ data StrataData = StrataData {
   , xDesignMatrix :: Matrix Double
   , xOffset :: Vector Double
   , weights :: Vector Double
+  , xProdBeta :: Vector Double
   }
 
 data OverallData = OverallData {
@@ -60,8 +61,11 @@ updateStrata
   -> (IterationInfo, OverallData)
 updateStrata beta strataData iterationInfo overallData =
   let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
-      weightedRisk = VS.zipWith (*) strataData.weights xProdBeta
-  in  calcTimeBlock strataData iterationInfo weightedRisk overallData
+      weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
+  in  calcTimeBlock strataData iterationInfo weightedRisks overallData
+  where
+    calcWeightedRisk :: Double -> Double -> Double
+    calcWeightedRisk w x = w * exp x
 
 calcTimeBlock
   :: StrataData
@@ -69,12 +73,12 @@ calcTimeBlock
   -> Vector Double
   -> OverallData
   -> (IterationInfo, OverallData)
-calcTimeBlock strataData iterationInfo weightedRisk overallData =
+calcTimeBlock strataData iterationInfo weightedRisks overallData =
   let p = VS.length overallData.score
       initialTiedData = createInitialTiedData p
       (newIterationInfo, newOverallData, newTiedData) =
         calcTimeBlockSubjects
-          strataData iterationInfo weightedRisk overallData initialTiedData
+          strataData iterationInfo weightedRisks overallData initialTiedData
       newXBarUnscaled = newOverallData.xBarUnscaled + newTiedData.xBarUnscaled
       newXBar = scale newTiedData.sumWeights newXBarUnscaled
       updatedOverallData = OverallData {
@@ -98,16 +102,22 @@ calcTimeBlockSubjects
   -> OverallData
   -> TiedData
   -> (IterationInfo, OverallData, TiedData)
-calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
+calcTimeBlockSubjects strataData iterationInfo weightedRisks overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
-  | (iterationInfo.subjectIndex < 0)
+  | (iterationInfo.subjectIndex < 0)                             -- FIXME: need to check that we don't cross strata
       || (strataData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
   -- Case: the current subject is part of the censoring or event tied time block
-  -- (note that it could be the first subject in the block)
+  -- (note that it could be the first subject in the block). We calculate and
+  -- accumulate all of the relevant terms for the subject and recursively call
+  -- `calcTimeBlockSubjects` to conditionally compute the next subject in the
+  -- time block
   | otherwise =
-      let subjectWeightedRisk = weightedRisk ! iterationInfo.subjectIndex
+      let subjectWeight = strataData.weights ! iterationInfo.subjectIndex
+          subjectXProdBeta = strataData.xProdBeta ! iterationInfo.subjectIndex
+          subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
+          -- subjectWeightedRisk = weightedRisks ! iterationInfo.subjectIndex
           subjectXRow = strataData.xDesignMatrix ! iterationInfo.subjectIndex
           weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
@@ -116,42 +126,42 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
             Censored ->
               let newOverallData = OverallData
                     { sumWeightedRisk = overallData.sumWeightedRisk
-                                      + subjectWeightedRisk
+                                        + subjectWeightedRisk
                     , logLikelihood = overallData.logLikelihood
                     , score = overallData.score
                     , xBarUnscaled = add overallData.xBarUnscaled
-                                        weightedSubjectXRow
+                                         weightedSubjectXRow
                     , informationTerm1 = newInformationTerm1
                     }
-                  newIterationInfo = iterationInfo {
-                      subjectIndex = iterationInfo.subjectIndex - 1
+                  newIterationInfo = iterationInfo
+                    { subjectIndex = iterationInfo.subjectIndex - 1
                     }
               in  calcTimeBlockSubjects
                     strataData
                     newIterationInfo
-                    weightedRisk
+                    weightedRisks
                     newOverallData
                     tiedData
             ObservedEvent ->
-              let newTiedData = TiedData {
-                      sumWeights = tiedData.sumWeights + subjectWeightedRisk -- FIXME: wrong!!
+              let newTiedData = TiedData
+                    { sumWeights = tiedData.sumWeights + subjectWeight
                     , sumWeightedRisk = tiedData.sumWeights
                                         + subjectWeightedRisk
                     , logLikelihood = tiedData.logLikelihood
-                                      + subjectWeightedRisk
-                    , score = add tiedData.score subjectXRow
+                                      + (subjectWeight * subjectXProdBeta) -- TODO: split this into logLikelihoodTerm1 and logLikelihoodTerm2?
+                    , score = add tiedData.score weightedSubjectXRow
                     , xBarUnscaled = add tiedData.xBarUnscaled
                                          weightedSubjectXRow
                     , informationTerm1 = newInformationTerm1
                     }
-                  newIterationInfo = iterationInfo {
-                      nDead = iterationInfo.nDead + 1
+                  newIterationInfo = iterationInfo
+                    { nEvents = iterationInfo.nEvents + 1
                     , subjectIndex = iterationInfo.subjectIndex - 1
                     }
               in  calcTimeBlockSubjects
                     strataData
                     newIterationInfo
-                    weightedRisk
+                    weightedRisks
                     overallData
                     newTiedData
 
@@ -159,7 +169,7 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
 
 
 -- need to update:
---   weightedRisk
+--   weightedRisks
 --   logLikelihood
 --   score
 --   informationTerm1
