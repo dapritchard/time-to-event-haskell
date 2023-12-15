@@ -101,7 +101,7 @@ calcTimeBlockSubjects
 calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
-  | (iterationInfo.subjectIndex >= iterationInfo.nSubjects)
+  | (iterationInfo.subjectIndex < 0)
       || (strataData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
   -- Case: the current subject is part of the censoring or event tied time block
@@ -124,7 +124,7 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
                     , informationTerm1 = newInformationTerm1
                     }
                   newIterationInfo = iterationInfo {
-                      subjectIndex = iterationInfo.subjectIndex + 1
+                      subjectIndex = iterationInfo.subjectIndex - 1
                     }
               in  calcTimeBlockSubjects
                     strataData
@@ -146,7 +146,7 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisk overallData tiedData
                     }
                   newIterationInfo = iterationInfo {
                       nDead = iterationInfo.nDead + 1
-                    , subjectIndex = iterationInfo.subjectIndex + 1
+                    , subjectIndex = iterationInfo.subjectIndex - 1
                     }
               in  calcTimeBlockSubjects
                     strataData

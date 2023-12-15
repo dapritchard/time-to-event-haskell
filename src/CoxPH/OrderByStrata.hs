@@ -30,5 +30,5 @@ orderByStrataTuples strata times = V.create $ do
     compareEntries :: (Int, Int, Double) -> (Int, Int, Double) -> Ordering
     compareEntries (_, stratum1, time1) (_, stratum2, time2)
       | stratum1 < stratum2 = LT
-      | stratum1 == stratum2 = compare time2 time1
+      | stratum1 == stratum2 = compare time1 time2
       | otherwise = GT
