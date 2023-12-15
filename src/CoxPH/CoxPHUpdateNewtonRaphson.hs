@@ -62,7 +62,7 @@ updateStrata
 updateStrata beta strataData iterationInfo overallData =
   let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
       weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
-  in  calcTimeBlock strataData iterationInfo weightedRisks overallData
+  in  calcTimeBlock strataData iterationInfo overallData
   where
     calcWeightedRisk :: Double -> Double -> Double
     calcWeightedRisk w x = w * exp x
@@ -70,15 +70,14 @@ updateStrata beta strataData iterationInfo overallData =
 calcTimeBlock
   :: StrataData
   -> IterationInfo
-  -> Vector Double
   -> OverallData
   -> (IterationInfo, OverallData)
-calcTimeBlock strataData iterationInfo weightedRisks overallData =
+calcTimeBlock strataData iterationInfo overallData =
   let p = VS.length overallData.score
       initialTiedData = createInitialTiedData p
       (newIterationInfo, newOverallData, newTiedData) =
         calcTimeBlockSubjects
-          strataData iterationInfo weightedRisks overallData initialTiedData
+          strataData iterationInfo overallData initialTiedData
       newXBarUnscaled = newOverallData.xBarUnscaled + newTiedData.xBarUnscaled
       newXBar = scale newTiedData.sumWeights newXBarUnscaled
       updatedOverallData = OverallData {
@@ -98,11 +97,10 @@ calcTimeBlock strataData iterationInfo weightedRisks overallData =
 calcTimeBlockSubjects
   :: StrataData
   -> IterationInfo
-  -> Vector Double
   -> OverallData
   -> TiedData
   -> (IterationInfo, OverallData, TiedData)
-calcTimeBlockSubjects strataData iterationInfo weightedRisks overallData tiedData
+calcTimeBlockSubjects strataData iterationInfo overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
   | (iterationInfo.subjectIndex < 0)                             -- FIXME: need to check that we don't cross strata
@@ -117,7 +115,6 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisks overallData tiedDat
       let subjectWeight = strataData.weights ! iterationInfo.subjectIndex
           subjectXProdBeta = strataData.xProdBeta ! iterationInfo.subjectIndex
           subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
-          -- subjectWeightedRisk = weightedRisks ! iterationInfo.subjectIndex
           subjectXRow = strataData.xDesignMatrix ! iterationInfo.subjectIndex
           weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
@@ -139,7 +136,6 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisks overallData tiedDat
               in  calcTimeBlockSubjects
                     strataData
                     newIterationInfo
-                    weightedRisks
                     newOverallData
                     tiedData
             ObservedEvent ->
@@ -161,7 +157,6 @@ calcTimeBlockSubjects strataData iterationInfo weightedRisks overallData tiedDat
               in  calcTimeBlockSubjects
                     strataData
                     newIterationInfo
-                    weightedRisks
                     overallData
                     newTiedData
 
