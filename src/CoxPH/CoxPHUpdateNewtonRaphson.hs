@@ -39,14 +39,6 @@ data StrataData = StrataData
   }
 
 data OverallData = OverallData
-  { sumWeightedRisk :: Double
-  , logLikelihood :: Double
-  , score :: Vector Double
-  , xBarUnscaled :: Vector Double
-  , informationTerm1 :: Matrix Double
-  }
-
-data TiedData = TiedData
   { sumWeights :: Double
   , sumWeightedRisk :: Double
   , logLikelihood :: Double
@@ -54,6 +46,15 @@ data TiedData = TiedData
   , xBarUnscaled :: Vector Double
   , informationTerm1 :: Matrix Double
   }
+
+-- data TiedData = TiedData
+--   { sumWeights :: Double
+--   , sumWeightedRisk :: Double
+--   , logLikelihood :: Double
+--   , score :: Vector Double
+--   , xBarUnscaled :: Vector Double
+--   , informationTerm1 :: Matrix Double
+--   }
 
 updateStrata
   :: Vector Double
@@ -120,13 +121,12 @@ calcTimeBlocks strataData iterationInfo overallData
     computeBreslow
       :: IterationInfo
       -> OverallData
-      -> TiedData
+      -> OverallData
       -> (IterationInfo, OverallData)
     computeBreslow iterationInfo overallData tiedData
       | iterationInfo.nEvents == 0 =
-        let newLogLikelihood = overallData.logLikelihood
-                               + tiedData.logLikelihood
-            newOverallData = overallData { logLikelihood = newLoglikelihood }
+        let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
+            newOverallData = overallData { logLikelihood = newLogLikelihood }
         -- in  (overallData { logLikelihood  = newLoglikelihood })
         in  (iterationInfo, overallData) -- FIXME
 
@@ -135,8 +135,8 @@ calcTimeBlocksSubjects
   :: StrataData
   -> IterationInfo
   -> OverallData
-  -> TiedData
-  -> (IterationInfo, OverallData, TiedData)
+  -> OverallData
+  -> (IterationInfo, OverallData, OverallData)
 calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
@@ -158,11 +158,9 @@ calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
                                       (outer subjectXRow subjectXRow)
       in  case strataData.eventStatus V.! iterationInfo.subjectIndex of
             Censored ->
-              let newOverallData = OverallData
+              let newOverallData = overallData
                     { sumWeightedRisk = overallData.sumWeightedRisk
                                         + subjectWeightedRisk
-                    , logLikelihood = overallData.logLikelihood
-                    , score = overallData.score
                     , xBarUnscaled = add overallData.xBarUnscaled
                                          weightedSubjectXRow
                     , informationTerm1 = newInformationTerm1
@@ -176,7 +174,7 @@ calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
                     newOverallData
                     tiedData
             ObservedEvent ->
-              let newTiedData = TiedData
+              let newTiedData = tiedData
                     { sumWeights = tiedData.sumWeights + subjectWeight
                     , sumWeightedRisk = tiedData.sumWeights
                                         + subjectWeightedRisk
@@ -221,9 +219,9 @@ m = fromColumns [v1, v2]
 -- testResult :: Vector Double
 -- testResult =  testMatrix #> testVector
 
-createInitialTiedData :: Int -> TiedData
+createInitialTiedData :: Int -> OverallData
 createInitialTiedData p
-  = TiedData
+  = OverallData
       { sumWeights = 0
       , sumWeightedRisk = 0
       , logLikelihood = 0
