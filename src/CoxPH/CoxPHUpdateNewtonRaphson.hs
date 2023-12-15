@@ -91,45 +91,50 @@ calcTimeBlocks strataData iterationInfo overallData
   | otherwise =
       let p = VS.length overallData.score
           initialTiedData = createInitialTiedData p
-          (newIterationInfo, newOverallData, newTiedData) =
+          -- (newIterationInfo, newOverallData, newTiedData) =
+          results@(newIterationInfo, newOverallData, newTiedData) =
             calcTimeBlocksSubjects
               strataData
               iterationInfo
               overallData
               initialTiedData
       in  case strataData.tiesMethod of
-            Breslow ->
-              let newXBarUnscaled = newOverallData.xBarUnscaled
-                              + newTiedData.xBarUnscaled
-                  -- newXBar = scale newTiedData.sumWeights newXBarUnscaled
-                  -- newLogLikelihood =
-                    -- if
-                  updatedOverallData = OverallData
-                    { sumWeightedRisk = newOverallData.sumWeightedRisk
-                                        + newTiedData.sumWeightedRisk
-                    , logLikelihood = newOverallData.logLikelihood
-                                      - (newTiedData.sumWeights
-                                        * log newTiedData.logLikelihood)
-                    , score = add newOverallData.score
-                                  (scale newTiedData.sumWeights newXBar)
-                    , xBarUnscaled = newXBarUnscaled
-                    , informationTerm1 = add newOverallData.informationTerm1
-                                            newTiedData.informationTerm1
-                    }
-              in  (newIterationInfo, updatedOverallData) -- FIXME: need to update information
-  where
-    computeBreslow
-      :: IterationInfo
-      -> OverallData
-      -> OverallData
-      -> (IterationInfo, OverallData)
-    computeBreslow iterationInfo overallData tiedData
-      | iterationInfo.nEvents == 0 =
-        let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
-            newOverallData = overallData { logLikelihood = newLogLikelihood }
-        -- in  (overallData { logLikelihood  = newLoglikelihood })
-        in  (iterationInfo, overallData) -- FIXME
+            -- Breslow -> uncurry3 computeBreslow $ (newIterationInfo, newOverallData, newTiedData)
+            Breslow -> let combinedResults = uncurry3 computeBreslow results
+                       in  (newIterationInfo, combinedResults)
 
+computeBreslow
+  :: IterationInfo
+  -> OverallData
+  -> OverallData
+  -> OverallData
+computeBreslow iterationInfo overallData tiedData
+  | iterationInfo.nEvents == 0 =
+    let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
+        newOverallData = overallData { logLikelihood = newLogLikelihood }
+    in  newOverallData
+  | otherwise =
+    let
+        newSumWeightedRisk = overallData.sumWeightedRisk
+                             + tiedData.sumWeightedRisk
+        newXBarUnscaled = add overallData.xBarUnscaled
+                              tiedData.xBarUnscaled
+        newXBar = scale (1 / newSumWeightedRisk) newXBarUnscaled
+        updatedOverallData = OverallData
+          { sumWeights = 0
+          , sumWeightedRisk = newSumWeightedRisk
+          , logLikelihood = overallData.logLikelihood
+                            + tiedData.logLikelihood
+                            - (tiedData.sumWeights * log newSumWeightedRisk)
+          , score = add overallData.score (scale tiedData.sumWeights newXBar)
+          , xBarUnscaled = newXBarUnscaled
+          , informationTerm1 = add overallData.informationTerm1
+                                   tiedData.informationTerm1
+          }
+    in  updatedOverallData
+
+uncurry3 :: (a -> b -> c -> d) -> (a, b, c) -> d
+uncurry3 f (a, b, c) = f a b c
 
 calcTimeBlocksSubjects
   :: StrataData
