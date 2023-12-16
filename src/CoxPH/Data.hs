@@ -13,7 +13,7 @@ data Delta = ObservedEvent | Censored
 
 data CoxPHConvergenceFailure = CoxPHConvergenceFailure
 
-data CoxPHMethod = Breslow | Effron
+data CoxPHMethod = Breslow | Efron
 
 data LastInStrataIndicator = LastInStrataNo | LastInStrataYes
 

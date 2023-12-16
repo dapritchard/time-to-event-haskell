@@ -75,13 +75,13 @@ calcTimeBlocks
   -> IterationInfo
   -> OverallData
   -> Matrix Double
-  -> (IterationInfo, OverallData)
+  -> (IterationInfo, OverallData, Matrix Double)
 calcTimeBlocks strataData iterationInfo overallData informationMatrix
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different stratum. This is the base case
   | (iterationInfo.subjectIndex < 0)
       || checkDifferentStrata strataData iterationInfo =
-      (iterationInfo, overallData)
+      (iterationInfo, overallData, informationMatrix)
   -- Case: the current subject is part of the current stratum (note that it
   -- could be the first subject in the stratum).
   --
@@ -102,7 +102,9 @@ calcTimeBlocks strataData iterationInfo overallData informationMatrix
       in  case strataData.tiesMethod of
             -- Breslow -> uncurry3 computeBreslow $ (newIterationInfo, newOverallData, newTiedData)
             Breslow -> let combinedResults = uncurry3 computeBreslow results informationMatrix
-                       in  (newIterationInfo, fst combinedResults)  -- FIXME: need to pass along information matrix
+                       in  (newIterationInfo, fst combinedResults, snd combinedResults)
+            Efron   -> let combinedResults = uncurry3 computeBreslow results informationMatrix
+                       in  (newIterationInfo, fst combinedResults, snd combinedResults)
 
 computeBreslow
   :: IterationInfo
