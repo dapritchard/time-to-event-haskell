@@ -74,8 +74,9 @@ calcTimeBlocks
   :: StrataData
   -> IterationInfo
   -> OverallData
+  -> Matrix Double
   -> (IterationInfo, OverallData)
-calcTimeBlocks strataData iterationInfo overallData
+calcTimeBlocks strataData iterationInfo overallData informationMatrix
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different stratum. This is the base case
   | (iterationInfo.subjectIndex < 0)
@@ -100,19 +101,20 @@ calcTimeBlocks strataData iterationInfo overallData
               initialTiedData
       in  case strataData.tiesMethod of
             -- Breslow -> uncurry3 computeBreslow $ (newIterationInfo, newOverallData, newTiedData)
-            Breslow -> let combinedResults = uncurry3 computeBreslow results
-                       in  (newIterationInfo, combinedResults)
+            Breslow -> let combinedResults = uncurry3 computeBreslow results informationMatrix
+                       in  (newIterationInfo, fst combinedResults)  -- FIXME: need to pass along information matrix
 
 computeBreslow
   :: IterationInfo
   -> OverallData
   -> OverallData
-  -> OverallData
-computeBreslow iterationInfo overallData tiedData
+  -> Matrix Double
+  -> (OverallData, Matrix Double)
+computeBreslow iterationInfo overallData tiedData informationMatrix
   | iterationInfo.nEvents == 0 =
     let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
         newOverallData = overallData { logLikelihood = newLogLikelihood }
-    in  newOverallData
+    in  (newOverallData, informationMatrix)
   | otherwise =
     let
         newSumWeightedRisk = overallData.sumWeightedRisk
@@ -120,21 +122,29 @@ computeBreslow iterationInfo overallData tiedData
         newXBarUnscaled = add overallData.xBarUnscaled
                               tiedData.xBarUnscaled
         newXBar = scale (1 / newSumWeightedRisk) newXBarUnscaled
-        updatedOverallData = OverallData
+        newOverallData = OverallData
           { sumWeights = 0
           , sumWeightedRisk = newSumWeightedRisk
           , logLikelihood = overallData.logLikelihood
                             + tiedData.logLikelihood
                             - (tiedData.sumWeights * log newSumWeightedRisk)
-          , score = add overallData.score (scale tiedData.sumWeights newXBar)
+          , score = add overallData.score (scale (- tiedData.sumWeights) newXBar)
           , xBarUnscaled = newXBarUnscaled
           , informationTerm1 = add overallData.informationTerm1
                                    tiedData.informationTerm1
           }
-    in  updatedOverallData
+        blockInformation = scale (tiedData.sumWeights / newSumWeightedRisk)
+                                 (add newOverallData.informationTerm1
+                                      (scale (- newSumWeightedRisk)
+                                             (outer newXBar newXBar)))
+        newInformationMatrix = add informationMatrix blockInformation
+    in  (newOverallData, newInformationMatrix)
 
 uncurry3 :: (a -> b -> c -> d) -> (a, b, c) -> d
 uncurry3 f (a, b, c) = f a b c
+
+-- uncurry4 :: (a -> b -> c -> d -> e) -> (a, b, c, e) -> d
+-- uncurry4 f (a, b, c) = f a b c
 
 calcTimeBlocksSubjects
   :: StrataData
