@@ -56,19 +56,19 @@ data OverallData = OverallData
 --   , informationTerm1 :: Matrix Double
 --   }
 
-updateStrata
-  :: Vector Double
-  -> StrataData
-  -> IterationInfo
-  -> OverallData
-  -> (IterationInfo, OverallData)
-updateStrata beta strataData iterationInfo overallData =
-  let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
-      -- weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
-  in  calcTimeBlocks strataData iterationInfo overallData
-  -- where
-  --   calcWeightedRisk :: Double -> Double -> Double
-  --   calcWeightedRisk w x = w * exp x
+-- updateStrata
+--   :: Vector Double
+--   -> StrataData
+--   -> IterationInfo
+--   -> OverallData
+--   -> (IterationInfo, OverallData)
+-- updateStrata beta strataData iterationInfo overallData =
+--   let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
+--       -- weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
+--   in  calcTimeBlocks strataData iterationInfo overallData
+--   -- where
+--   --   calcWeightedRisk :: Double -> Double -> Double
+--   --   calcWeightedRisk w x = w * exp x
 
 calcTimeBlocks
   :: StrataData
@@ -83,28 +83,30 @@ calcTimeBlocks strataData iterationInfo overallData informationMatrix
       || checkDifferentStrata strataData iterationInfo =
       (iterationInfo, overallData, informationMatrix)
   -- Case: the current subject is part of the current stratum (note that it
-  -- could be the first subject in the stratum).
-  --
-  -- We calculate and accumulate all
-  -- of the relevant terms for the subject and recursively call
-  -- `calcTimeBlocksSubjects` to conditionally compute the next subject in the
-  -- time block
+  -- could be the first subject in the stratum). We calculate and accumulate all
+  -- of the relevant terms for the subjects within a strata who were censored or
+  -- had an event at the current time, and recursively call
+  -- `calcTimeBlocksSubjects` to conditionally compute the next time block
   | otherwise =
       let p = VS.length overallData.score
           initialTiedData = createInitialTiedData p
-          -- (newIterationInfo, newOverallData, newTiedData) =
-          results@(newIterationInfo, newOverallData, newTiedData) =
-            calcTimeBlocksSubjects
-              strataData
-              iterationInfo
-              overallData
-              initialTiedData
-      in  case strataData.tiesMethod of
-            -- Breslow -> uncurry3 computeBreslow $ (newIterationInfo, newOverallData, newTiedData)
-            Breslow -> let combinedResults = uncurry3 computeBreslow results informationMatrix
-                       in  (newIterationInfo, fst combinedResults, snd combinedResults)
-            Efron   -> let combinedResults = uncurry3 computeBreslow results informationMatrix
-                       in  (newIterationInfo, fst combinedResults, snd combinedResults)
+          (timeBlockIterationInfo, timeBlockOverallData, timeBlockTiedData) =
+            calcTimeBlocksSubjects strataData
+                                   iterationInfo
+                                   overallData
+                                   initialTiedData
+          aggregateData = case strataData.tiesMethod of
+            Breslow -> computeBreslow
+            Efron   -> computeEfron
+          (newOverallData, newInformationMatrix) =
+            aggregateData timeBlockIterationInfo
+                          timeBlockOverallData
+                          timeBlockTiedData
+                          informationMatrix
+      in  calcTimeBlocks strataData
+                         timeBlockIterationInfo
+                         newOverallData
+                         newInformationMatrix
 
 computeBreslow
   :: IterationInfo
@@ -142,11 +144,17 @@ computeBreslow iterationInfo overallData tiedData informationMatrix
         newInformationMatrix = add informationMatrix blockInformation
     in  (newOverallData, newInformationMatrix)
 
-uncurry3 :: (a -> b -> c -> d) -> (a, b, c) -> d
-uncurry3 f (a, b, c) = f a b c
-
--- uncurry4 :: (a -> b -> c -> d -> e) -> (a, b, c, e) -> d
--- uncurry4 f (a, b, c) = f a b c
+computeEfron
+  :: IterationInfo
+  -> OverallData
+  -> OverallData
+  -> Matrix Double
+  -> (OverallData, Matrix Double)
+computeEfron iterationInfo overallData tiedData informationMatrix
+  | iterationInfo.nEvents <= 1 =
+    computeBreslow iterationInfo overallData tiedData informationMatrix
+  | otherwise =
+    undefined -- FIXME
 
 calcTimeBlocksSubjects
   :: StrataData
