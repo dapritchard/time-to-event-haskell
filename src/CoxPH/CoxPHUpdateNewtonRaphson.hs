@@ -56,19 +56,41 @@ data OverallData = OverallData
 --   , informationTerm1 :: Matrix Double
 --   }
 
--- updateStrata
---   :: Vector Double
---   -> StrataData
---   -> IterationInfo
---   -> OverallData
---   -> (IterationInfo, OverallData)
--- updateStrata beta strataData iterationInfo overallData =
---   let xProdBeta = add (strataData.xDesignMatrix #> beta) strataData.xOffset
---       -- weightedRisks = VS.zipWith calcWeightedRisk strataData.weights xProdBeta
---   in  calcTimeBlocks strataData iterationInfo overallData
---   -- where
---   --   calcWeightedRisk :: Double -> Double -> Double
---   --   calcWeightedRisk w x = w * exp x
+data NRUpdateResults = NRUpdateResults
+  { logLikelihood :: Double
+  , score :: Vector Double
+  , informationMatrix :: Matrix Double
+  }
+
+calcStrata
+  :: StrataData
+  -> IterationInfo
+  -> NRUpdateResults
+  -> (IterationInfo, NRUpdateResults)
+calcStrata strataData iterationInfo nRUpdateResults
+  -- Case: we've seen all of the subjects. This is the base case
+  | iterationInfo.subjectIndex < 0 =
+    (iterationInfo, nRUpdateResults)
+  -- Case: compute the remaining strata. We calculate all of the
+  -- relevant terms for the current stratum  and recursively call `calcStrata` to
+  -- conditionally compute the next stratum
+  | otherwise =
+    let overallData = createInitialData (length nRUpdateResults.score)
+        (newIterationInfo, newNRUpdateResults) =
+          calcTimeBlocks strataData iterationInfo overallData
+        aggregatedNRUpdateResults = aggregateNRUpdateResults nRUpdateResults
+                                                             newNRUpdateResults
+    in calcStrata newIterationInfo aggregatedNRUpdateResults
+  where
+    aggregateNRUpdateResults
+      :: NRUpdateResults
+      -> NRUpdateResults
+      -> NRUpdateResults
+    aggregateNRUpdateResults existing new = NRUpdateResults
+      { logLikelihood = existing.logLikelihood + new.logLikelihood
+      , score = existing.score + new.score
+      , informationMatrix = existing.informationMatrix + new.informationMatrix
+      }
 
 calcTimeBlocks
   :: StrataData
@@ -89,7 +111,7 @@ calcTimeBlocks strataData iterationInfo overallData informationMatrix
   -- `calcTimeBlocksSubjects` to conditionally compute the next time block
   | otherwise =
       let p = VS.length overallData.score
-          initialTiedData = createInitialTiedData p
+          initialTiedData = createInitialData p
           (timeBlockIterationInfo, timeBlockOverallData, timeBlockTiedData) =
             calcTimeBlocksSubjects strataData
                                    iterationInfo
@@ -165,7 +187,8 @@ calcTimeBlocksSubjects
 calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
-  | (iterationInfo.subjectIndex < 0)                             -- FIXME: need to check that we don't cross strata
+  | (iterationInfo.subjectIndex < 0)
+      || checkDifferentStrata strataData iterationInfo
       || (strataData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
   -- Case: the current subject is part of the current censoring or event tied
@@ -244,8 +267,8 @@ m = fromColumns [v1, v2]
 -- testResult :: Vector Double
 -- testResult =  testMatrix #> testVector
 
-createInitialTiedData :: Int -> OverallData
-createInitialTiedData p
+createInitialData :: Int -> OverallData
+createInitialData p
   = OverallData
       { sumWeights = 0
       , sumWeightedRisk = 0
