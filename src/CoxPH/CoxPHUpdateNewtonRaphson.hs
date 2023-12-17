@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 -- |
 
 module CoxPH.CoxPHUpdateNewtonRaphson where
@@ -57,7 +58,7 @@ data OverallData = OverallData
 --   }
 
 data NRUpdateResults = NRUpdateResults
-  { logLikelihood :: Double
+  { sumLogLikelihood :: Double
   , score :: Vector Double
   , informationMatrix :: Matrix Double
   }
@@ -69,28 +70,35 @@ calcStrata
   -> (IterationInfo, NRUpdateResults)
 calcStrata strataData iterationInfo nRUpdateResults
   -- Case: we've seen all of the subjects. This is the base case
-  | iterationInfo.subjectIndex < 0 =
+  | iterationInfo.subjectIndex < 0 = -- TODO: create helper functions for checks
     (iterationInfo, nRUpdateResults)
   -- Case: compute the remaining strata. We calculate all of the
   -- relevant terms for the current stratum  and recursively call `calcStrata` to
   -- conditionally compute the next stratum
   | otherwise =
-    let overallData = createInitialData (length nRUpdateResults.score)
-        (newIterationInfo, newNRUpdateResults) =
-          calcTimeBlocks strataData iterationInfo overallData
+    let p = VS.length nRUpdateResults.score
+        initialData = createInitialData p
+        initialInformation = createEmptyMatrix p
+        (newIterationInfo, newOverallData, informationMatrix) =
+          calcTimeBlocks strataData iterationInfo initialData initialInformation
         aggregatedNRUpdateResults = aggregateNRUpdateResults nRUpdateResults
-                                                             newNRUpdateResults
-    in calcStrata newIterationInfo aggregatedNRUpdateResults
+                                                             newOverallData
+                                                             informationMatrix
+    in calcStrata strataData newIterationInfo aggregatedNRUpdateResults
   where
     aggregateNRUpdateResults
       :: NRUpdateResults
+      -> OverallData
+      -> Matrix Double
       -> NRUpdateResults
-      -> NRUpdateResults
-    aggregateNRUpdateResults existing new = NRUpdateResults
-      { logLikelihood = existing.logLikelihood + new.logLikelihood
-      , score = existing.score + new.score
-      , informationMatrix = existing.informationMatrix + new.informationMatrix
-      }
+    aggregateNRUpdateResults nRUpdateResults overallData informationMatrix =
+      NRUpdateResults
+        { sumLogLikelihood = nRUpdateResults.sumLogLikelihood
+                             + overallData.logLikelihood
+        , score = add nRUpdateResults.score overallData.score
+        , informationMatrix = add nRUpdateResults.informationMatrix
+                                  informationMatrix
+        }
 
 calcTimeBlocks
   :: StrataData
@@ -101,7 +109,7 @@ calcTimeBlocks
 calcTimeBlocks strataData iterationInfo overallData informationMatrix
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different stratum. This is the base case
-  | (iterationInfo.subjectIndex < 0)
+  | (iterationInfo.subjectIndex < 0) -- TODO: create helper functions for checks
       || checkDifferentStrata strataData iterationInfo =
       (iterationInfo, overallData, informationMatrix)
   -- Case: the current subject is part of the current stratum (note that it
@@ -139,7 +147,7 @@ computeBreslow
 computeBreslow iterationInfo overallData tiedData informationMatrix
   | iterationInfo.nEvents == 0 =
     let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
-        newOverallData = overallData { logLikelihood = newLogLikelihood }
+        newOverallData = (overallData :: OverallData) { logLikelihood = newLogLikelihood }
     in  (newOverallData, informationMatrix)
   | otherwise =
     let
@@ -187,7 +195,7 @@ calcTimeBlocksSubjects
 calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
-  | (iterationInfo.subjectIndex < 0)
+  | (iterationInfo.subjectIndex < 0) -- TODO: create helper functions for checks
       || checkDifferentStrata strataData iterationInfo
       || (strataData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
