@@ -5,21 +5,9 @@
 module CoxPH.CoxPHUpdateNewtonRaphson where
 
 import CoxPH.Data
--- import Numeric.LinearAlgebra.Data -- (Matrix, Vector, fromColumns)
-import Numeric.LinearAlgebra qualified as L -- (Matrix, Vector, fromColumns)
-import Numeric.LinearAlgebra ( (!), (#>), Matrix, Vector, add, diag, outer, scale, fromColumns )
+import Numeric.LinearAlgebra ( (!), Matrix, Vector, add, cols, diag, outer, scale )
 import Data.Vector.Storable qualified as VS
 import Data.Vector qualified as V
-
-updateNewtonRaphson :: [StrataData] -> VS.Vector Double -> Vector Double -> ()
-updateNewtonRaphson strataDatas weights beta =
-  -- let z = add ()
-  ()
--- updateTime
-
--- data TTEData = TTEData {
-
---   }
 
 data IterationInfo = IterationInfo
   { subjectIndex :: Int
@@ -32,7 +20,6 @@ data StrataData = StrataData
   { time :: VS.Vector Double
   , eventStatus :: V.Vector Delta
   , xDesignMatrix :: Matrix Double
-  , xOffset :: Vector Double
   , stratum :: Vector Int
   , weights :: Vector Double
   , xProdBeta :: Vector Double
@@ -48,20 +35,30 @@ data OverallData = OverallData
   , informationTerm1 :: Matrix Double
   }
 
--- data TiedData = TiedData
---   { sumWeights :: Double
---   , sumWeightedRisk :: Double
---   , logLikelihood :: Double
---   , score :: Vector Double
---   , xBarUnscaled :: Vector Double
---   , informationTerm1 :: Matrix Double
---   }
-
 data NRUpdateResults = NRUpdateResults
   { sumLogLikelihood :: Double
   , score :: Vector Double
   , informationMatrix :: Matrix Double
   }
+
+calcNewtonRaphson :: StrataData -> NRUpdateResults
+calcNewtonRaphson strataData =
+  let p = cols strataData.xDesignMatrix
+      iterationInfo = IterationInfo
+        { subjectIndex = VS.length strataData.time - 1
+        , time = 0
+        , stratum = 0
+        , nEvents = 0
+        }
+      nRUpdateResults = NRUpdateResults
+        { sumLogLikelihood = 0
+        , score = VS.replicate p 0
+        , informationMatrix = createEmptyMatrix p
+        }
+      (_, newNRUpdateResults) = calcStrata strataData
+                                           iterationInfo
+                                           nRUpdateResults
+  in  newNRUpdateResults
 
 calcStrata
   :: StrataData
@@ -77,15 +74,27 @@ calcStrata strataData iterationInfo nRUpdateResults
   -- conditionally compute the next stratum
   | otherwise =
     let p = VS.length nRUpdateResults.score
-        initialData = createInitialData p
+        initialIterationInfo = initializeIterationInfo iterationInfo
+        initialOverallData = createInitialData p
         initialInformation = createEmptyMatrix p
         (newIterationInfo, newOverallData, informationMatrix) =
-          calcTimeBlocks strataData iterationInfo initialData initialInformation
+          calcTimeBlocks strataData
+                         initialIterationInfo
+                         initialOverallData
+                         initialInformation
         aggregatedNRUpdateResults = aggregateNRUpdateResults nRUpdateResults
                                                              newOverallData
                                                              informationMatrix
     in calcStrata strataData newIterationInfo aggregatedNRUpdateResults
   where
+    initializeIterationInfo :: IterationInfo -> IterationInfo
+    initializeIterationInfo iterationInfo =
+      IterationInfo
+        { subjectIndex = iterationInfo.subjectIndex
+        , time = iterationInfo.time
+        , stratum = strataData.stratum VS.! iterationInfo.subjectIndex
+        , nEvents = iterationInfo.nEvents
+        }
     aggregateNRUpdateResults
       :: NRUpdateResults
       -> OverallData
@@ -120,9 +129,10 @@ calcTimeBlocks strataData iterationInfo overallData informationMatrix
   | otherwise =
       let p = VS.length overallData.score
           initialTiedData = createInitialData p
+          initialIterationInfo = initializeIterationInfo iterationInfo
           (timeBlockIterationInfo, timeBlockOverallData, timeBlockTiedData) =
             calcTimeBlocksSubjects strataData
-                                   iterationInfo
+                                   initialIterationInfo
                                    overallData
                                    initialTiedData
           aggregateData = case strataData.tiesMethod of
@@ -137,6 +147,15 @@ calcTimeBlocks strataData iterationInfo overallData informationMatrix
                          timeBlockIterationInfo
                          newOverallData
                          newInformationMatrix
+  where
+    initializeIterationInfo :: IterationInfo -> IterationInfo
+    initializeIterationInfo iterationInfo =
+      IterationInfo
+        { subjectIndex = iterationInfo.subjectIndex
+        , time = strataData.time VS.! iterationInfo.subjectIndex
+        , stratum = iterationInfo.stratum
+        , nEvents = 0
+        }
 
 computeBreslow
   :: IterationInfo
@@ -242,38 +261,14 @@ calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
                     , informationTerm1 = newInformationTerm1
                     }
                   newIterationInfo = iterationInfo
-                    { nEvents = iterationInfo.nEvents + 1
-                    , subjectIndex = iterationInfo.subjectIndex - 1
+                    { subjectIndex = iterationInfo.subjectIndex - 1
+                    , nEvents = iterationInfo.nEvents + 1
                     }
               in  calcTimeBlocksSubjects
                     strataData
                     newIterationInfo
                     overallData
                     newTiedData
-
--- addSubject :: VS.Vector Double -> Int -> ()
-
-
--- need to update:
---   weightedRisks
---   logLikelihood
---   score
---   informationTerm1
-
--- testMatrix :: Matrix Double
--- testMatrix = matrix 2 [1..4]
-
-v1 :: Vector Double
-v1 = L.fromList [3, 6]
-
-v2 :: Vector Double
-v2 = L.fromList [3, 6]
-
-m :: Matrix Double
-m = fromColumns [v1, v2]
-
--- testResult :: Vector Double
--- testResult =  testMatrix #> testVector
 
 createInitialData :: Int -> OverallData
 createInitialData p
@@ -293,3 +288,15 @@ checkDifferentStrata :: StrataData -> IterationInfo -> Bool
 checkDifferentStrata strataData iterationInfo =
   let subjectStratum = strataData.stratum VS.! iterationInfo.subjectIndex
   in  subjectStratum /= iterationInfo.stratum
+
+-- v1 :: Vector Double
+-- v1 = L.fromList [3, 6]
+
+-- v2 :: Vector Double
+-- v2 = L.fromList [3, 6]
+
+-- m :: Matrix Double
+-- m = fromColumns [v1, v2]
+
+-- testResult :: Vector Double
+-- testResult =  testMatrix #> testVector
