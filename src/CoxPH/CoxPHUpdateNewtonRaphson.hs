@@ -5,7 +5,7 @@
 module CoxPH.CoxPHUpdateNewtonRaphson where
 
 import CoxPH.Data
-import Numeric.LinearAlgebra ( (!), Matrix, Vector, add, cols, diag, outer, scale )
+import Numeric.LinearAlgebra ( Matrix, add, cols, diag, outer, scale )
 import Data.Vector.Storable qualified as VS
 import Data.Vector qualified as V
 
@@ -20,9 +20,9 @@ data TTEData = TTEData
   { time :: VS.Vector Double
   , eventStatus :: V.Vector Delta
   , xDesignMatrix :: Matrix Double
-  , stratum :: Vector Int
-  , weights :: Vector Double
-  , xProdBeta :: Vector Double
+  , stratum :: VS.Vector Int
+  , weights :: VS.Vector Double
+  , xProdBeta :: VS.Vector Double
   , tiesMethod :: CoxPHMethod
   }
 
@@ -30,14 +30,14 @@ data NRTerms = NRTerms
   { sumWeights :: Double
   , sumWeightedRisk :: Double
   , logLikelihood :: Double
-  , score :: Vector Double
-  , xBarUnscaled :: Vector Double
+  , score :: VS.Vector Double
+  , xBarUnscaled :: VS.Vector Double
   , informationTerm1 :: Matrix Double
   }
 
 data NRResults = NRResults
   { sumLogLikelihood :: Double
-  , score :: Vector Double
+  , score :: VS.Vector Double
   , informationMatrix :: Matrix Double
   }
 
@@ -213,7 +213,7 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
   -- different censoring or event time. This is the base case
   | (iterationInfo.subjectIndex < 0) -- TODO: create helper functions for checks
       || checkDifferentStrata tteData iterationInfo
-      || (tteData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
+      || (tteData.time VS.! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
   -- Case: the current subject is part of the current censoring or event tied
   -- time block (note that it could be the first subject in the block). We
@@ -221,10 +221,11 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
   -- recursively call `calcTimeBlocksSubjects` to conditionally compute the next
   -- subject in the time block
   | otherwise =
-      let subjectWeight = tteData.weights ! iterationInfo.subjectIndex
-          subjectXProdBeta = tteData.xProdBeta ! iterationInfo.subjectIndex
+      let subjectWeight = tteData.weights VS.! iterationInfo.subjectIndex
+          subjectXProdBeta = tteData.xProdBeta VS.! iterationInfo.subjectIndex
           subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
-          subjectXRow = tteData.xDesignMatrix ! iterationInfo.subjectIndex
+          -- subjectXRow = tteData.xDesignMatrix VS.! iterationInfo.subjectIndex
+          subjectXRow = VS.replicate 5 0
           weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
                                       (outer subjectXRow subjectXRow)
