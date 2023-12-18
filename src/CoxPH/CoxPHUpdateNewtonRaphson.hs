@@ -16,7 +16,7 @@ data IterationInfo = IterationInfo
   , nEvents :: Int
   }
 
-data StrataData = StrataData
+data TTEData = TTEData
   { time :: VS.Vector Double
   , eventStatus :: V.Vector Delta
   , xDesignMatrix :: Matrix Double
@@ -26,7 +26,7 @@ data StrataData = StrataData
   , tiesMethod :: CoxPHMethod
   }
 
-data OverallData = OverallData
+data NRTerms = NRTerms
   { sumWeights :: Double
   , sumWeightedRisk :: Double
   , logLikelihood :: Double
@@ -35,91 +35,88 @@ data OverallData = OverallData
   , informationTerm1 :: Matrix Double
   }
 
-data NRUpdateResults = NRUpdateResults
+data NRResults = NRResults
   { sumLogLikelihood :: Double
   , score :: Vector Double
   , informationMatrix :: Matrix Double
   }
 
-calcNewtonRaphson :: StrataData -> NRUpdateResults
-calcNewtonRaphson strataData =
-  let p = cols strataData.xDesignMatrix
+calcNRResults :: TTEData -> NRResults
+calcNRResults tteData =
+  let p = cols tteData.xDesignMatrix
       iterationInfo = IterationInfo
-        { subjectIndex = VS.length strataData.time - 1
+        { subjectIndex = VS.length tteData.time - 1
         , time = 0
         , stratum = 0
         , nEvents = 0
         }
-      nRUpdateResults = NRUpdateResults
+      nrResults = NRResults
         { sumLogLikelihood = 0
         , score = VS.replicate p 0
         , informationMatrix = createEmptyMatrix p
         }
-      (_, newNRUpdateResults) = calcStrata strataData
-                                           iterationInfo
-                                           nRUpdateResults
-  in  newNRUpdateResults
+      (_, newNRResults) = calcStrata tteData iterationInfo nrResults
+  in  newNRResults
 
 calcStrata
-  :: StrataData
+  :: TTEData
   -> IterationInfo
-  -> NRUpdateResults
-  -> (IterationInfo, NRUpdateResults)
-calcStrata strataData iterationInfo nRUpdateResults
+  -> NRResults
+  -> (IterationInfo, NRResults)
+calcStrata tteData iterationInfo nrResults
   -- Case: we've seen all of the subjects. This is the base case
   | iterationInfo.subjectIndex < 0 = -- TODO: create helper functions for checks
-    (iterationInfo, nRUpdateResults)
+    (iterationInfo, nrResults)
   -- Case: compute the remaining strata. We calculate all of the
   -- relevant terms for the current stratum  and recursively call `calcStrata` to
   -- conditionally compute the next stratum
   | otherwise =
-    let p = VS.length nRUpdateResults.score
-        initialIterationInfo = initializeIterationInfo iterationInfo
-        initialOverallData = createInitialData p
+    let p = VS.length nrResults.score
+        initialIterationInfo = resetIterationInfo iterationInfo
+        initialNRTerms = createInitialData p
         initialInformation = createEmptyMatrix p
-        (newIterationInfo, newOverallData, informationMatrix) =
-          calcTimeBlocks strataData
+        (newIterationInfo, newNRTerms, informationMatrix) =
+          calcTimeBlocks tteData
                          initialIterationInfo
-                         initialOverallData
+                         initialNRTerms
                          initialInformation
-        aggregatedNRUpdateResults = aggregateNRUpdateResults nRUpdateResults
-                                                             newOverallData
-                                                             informationMatrix
-    in calcStrata strataData newIterationInfo aggregatedNRUpdateResults
+        aggregatedNRResults = aggregateNRResults nrResults
+                                                 newNRTerms
+                                                 informationMatrix
+    in calcStrata tteData newIterationInfo aggregatedNRResults
   where
-    initializeIterationInfo :: IterationInfo -> IterationInfo
-    initializeIterationInfo iterationInfo =
+    resetIterationInfo :: IterationInfo -> IterationInfo
+    resetIterationInfo iterationInfo =
       IterationInfo
         { subjectIndex = iterationInfo.subjectIndex
         , time = iterationInfo.time
-        , stratum = strataData.stratum VS.! iterationInfo.subjectIndex
+        , stratum = tteData.stratum VS.! iterationInfo.subjectIndex
         , nEvents = iterationInfo.nEvents
         }
-    aggregateNRUpdateResults
-      :: NRUpdateResults
-      -> OverallData
+    aggregateNRResults
+      :: NRResults
+      -> NRTerms
       -> Matrix Double
-      -> NRUpdateResults
-    aggregateNRUpdateResults nRUpdateResults overallData informationMatrix =
-      NRUpdateResults
-        { sumLogLikelihood = nRUpdateResults.sumLogLikelihood
+      -> NRResults
+    aggregateNRResults nrResults overallData informationMatrix =
+      NRResults
+        { sumLogLikelihood = nrResults.sumLogLikelihood
                              + overallData.logLikelihood
-        , score = add nRUpdateResults.score overallData.score
-        , informationMatrix = add nRUpdateResults.informationMatrix
-                                  informationMatrix
+        , score = add nrResults.score overallData.score
+        , informationMatrix = add nrResults.informationMatrix informationMatrix
         }
 
 calcTimeBlocks
-  :: StrataData
+  :: TTEData
   -> IterationInfo
-  -> OverallData
+  -> NRTerms
   -> Matrix Double
-  -> (IterationInfo, OverallData, Matrix Double)
-calcTimeBlocks strataData iterationInfo overallData informationMatrix
+  -> (IterationInfo, NRTerms, Matrix Double)
+calcTimeBlocks tteData iterationInfo overallData informationMatrix
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different stratum. This is the base case
   | (iterationInfo.subjectIndex < 0) -- TODO: create helper functions for checks
-      || checkDifferentStrata strataData iterationInfo =
+      || checkDifferentStrata tteData iterationInfo =
       (iterationInfo, overallData, informationMatrix)
   -- Case: the current subject is part of the current stratum (note that it
   -- could be the first subject in the stratum). We calculate and accumulate all
@@ -130,44 +127,44 @@ calcTimeBlocks strataData iterationInfo overallData informationMatrix
       let p = VS.length overallData.score
           initialTiedData = createInitialData p
           initialIterationInfo = initializeIterationInfo iterationInfo
-          (timeBlockIterationInfo, timeBlockOverallData, timeBlockTiedData) =
-            calcTimeBlocksSubjects strataData
+          (timeBlockIterationInfo, timeBlockNRTerms, timeBlockTiedData) =
+            calcTimeBlocksSubjects tteData
                                    initialIterationInfo
                                    overallData
                                    initialTiedData
-          aggregateData = case strataData.tiesMethod of
+          aggregateData = case tteData.tiesMethod of
             Breslow -> computeBreslow
             Efron   -> computeEfron
-          (newOverallData, newInformationMatrix) =
+          (newNRTerms, newInformationMatrix) =
             aggregateData timeBlockIterationInfo
-                          timeBlockOverallData
+                          timeBlockNRTerms
                           timeBlockTiedData
                           informationMatrix
-      in  calcTimeBlocks strataData
+      in  calcTimeBlocks tteData
                          timeBlockIterationInfo
-                         newOverallData
+                         newNRTerms
                          newInformationMatrix
   where
     initializeIterationInfo :: IterationInfo -> IterationInfo
     initializeIterationInfo iterationInfo =
       IterationInfo
         { subjectIndex = iterationInfo.subjectIndex
-        , time = strataData.time VS.! iterationInfo.subjectIndex
+        , time = tteData.time VS.! iterationInfo.subjectIndex
         , stratum = iterationInfo.stratum
         , nEvents = 0
         }
 
 computeBreslow
   :: IterationInfo
-  -> OverallData
-  -> OverallData
+  -> NRTerms
+  -> NRTerms
   -> Matrix Double
-  -> (OverallData, Matrix Double)
+  -> (NRTerms, Matrix Double)
 computeBreslow iterationInfo overallData tiedData informationMatrix
   | iterationInfo.nEvents == 0 =
     let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
-        newOverallData = (overallData :: OverallData) { logLikelihood = newLogLikelihood }
-    in  (newOverallData, informationMatrix)
+        newNRTerms = (overallData :: NRTerms) { logLikelihood = newLogLikelihood }
+    in  (newNRTerms, informationMatrix)
   | otherwise =
     let
         newSumWeightedRisk = overallData.sumWeightedRisk
@@ -175,7 +172,7 @@ computeBreslow iterationInfo overallData tiedData informationMatrix
         newXBarUnscaled = add overallData.xBarUnscaled
                               tiedData.xBarUnscaled
         newXBar = scale (1 / newSumWeightedRisk) newXBarUnscaled
-        newOverallData = OverallData
+        newNRTerms = NRTerms
           { sumWeights = 0
           , sumWeightedRisk = newSumWeightedRisk
           , logLikelihood = overallData.logLikelihood
@@ -187,18 +184,18 @@ computeBreslow iterationInfo overallData tiedData informationMatrix
                                    tiedData.informationTerm1
           }
         blockInformation = scale (tiedData.sumWeights / newSumWeightedRisk)
-                                 (add newOverallData.informationTerm1
+                                 (add newNRTerms.informationTerm1
                                       (scale (- newSumWeightedRisk)
                                              (outer newXBar newXBar)))
         newInformationMatrix = add informationMatrix blockInformation
-    in  (newOverallData, newInformationMatrix)
+    in  (newNRTerms, newInformationMatrix)
 
 computeEfron
   :: IterationInfo
-  -> OverallData
-  -> OverallData
+  -> NRTerms
+  -> NRTerms
   -> Matrix Double
-  -> (OverallData, Matrix Double)
+  -> (NRTerms, Matrix Double)
 computeEfron iterationInfo overallData tiedData informationMatrix
   | iterationInfo.nEvents <= 1 =
     computeBreslow iterationInfo overallData tiedData informationMatrix
@@ -206,17 +203,17 @@ computeEfron iterationInfo overallData tiedData informationMatrix
     undefined -- FIXME
 
 calcTimeBlocksSubjects
-  :: StrataData
+  :: TTEData
   -> IterationInfo
-  -> OverallData
-  -> OverallData
-  -> (IterationInfo, OverallData, OverallData)
-calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
+  -> NRTerms
+  -> NRTerms
+  -> (IterationInfo, NRTerms, NRTerms)
+calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
   -- Case: we've either seen all of the subjects or we've found a subject with a
   -- different censoring or event time. This is the base case
   | (iterationInfo.subjectIndex < 0) -- TODO: create helper functions for checks
-      || checkDifferentStrata strataData iterationInfo
-      || (strataData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
+      || checkDifferentStrata tteData iterationInfo
+      || (tteData.time ! iterationInfo.subjectIndex) /= iterationInfo.time =
       (iterationInfo, overallData, tiedData)
   -- Case: the current subject is part of the current censoring or event tied
   -- time block (note that it could be the first subject in the block). We
@@ -224,16 +221,16 @@ calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
   -- recursively call `calcTimeBlocksSubjects` to conditionally compute the next
   -- subject in the time block
   | otherwise =
-      let subjectWeight = strataData.weights ! iterationInfo.subjectIndex
-          subjectXProdBeta = strataData.xProdBeta ! iterationInfo.subjectIndex
+      let subjectWeight = tteData.weights ! iterationInfo.subjectIndex
+          subjectXProdBeta = tteData.xProdBeta ! iterationInfo.subjectIndex
           subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
-          subjectXRow = strataData.xDesignMatrix ! iterationInfo.subjectIndex
+          subjectXRow = tteData.xDesignMatrix ! iterationInfo.subjectIndex
           weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
                                       (outer subjectXRow subjectXRow)
-      in  case strataData.eventStatus V.! iterationInfo.subjectIndex of
+      in  case tteData.eventStatus V.! iterationInfo.subjectIndex of
             Censored ->
-              let newOverallData = overallData
+              let newNRTerms = overallData
                     { sumWeightedRisk = overallData.sumWeightedRisk
                                         + subjectWeightedRisk
                     , xBarUnscaled = add overallData.xBarUnscaled
@@ -244,9 +241,9 @@ calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
                     { subjectIndex = iterationInfo.subjectIndex - 1
                     }
               in  calcTimeBlocksSubjects
-                    strataData
+                    tteData
                     newIterationInfo
-                    newOverallData
+                    newNRTerms
                     tiedData
             ObservedEvent ->
               let newTiedData = tiedData
@@ -265,14 +262,14 @@ calcTimeBlocksSubjects strataData iterationInfo overallData tiedData
                     , nEvents = iterationInfo.nEvents + 1
                     }
               in  calcTimeBlocksSubjects
-                    strataData
+                    tteData
                     newIterationInfo
                     overallData
                     newTiedData
 
-createInitialData :: Int -> OverallData
+createInitialData :: Int -> NRTerms
 createInitialData p
-  = OverallData
+  = NRTerms
       { sumWeights = 0
       , sumWeightedRisk = 0
       , logLikelihood = 0
@@ -284,9 +281,9 @@ createInitialData p
 createEmptyMatrix :: Int -> Matrix Double
 createEmptyMatrix p = diag (VS.replicate p 0)
 
-checkDifferentStrata :: StrataData -> IterationInfo -> Bool
-checkDifferentStrata strataData iterationInfo =
-  let subjectStratum = strataData.stratum VS.! iterationInfo.subjectIndex
+checkDifferentStrata :: TTEData -> IterationInfo -> Bool
+checkDifferentStrata tteData iterationInfo =
+  let subjectStratum = tteData.stratum VS.! iterationInfo.subjectIndex
   in  subjectStratum /= iterationInfo.stratum
 
 -- v1 :: Vector Double
