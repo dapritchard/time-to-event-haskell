@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiWayIf #-}
+
 module CoxPH (
   CoxPHConvergenceFailure(..),
   CoxPHMethod(..),
@@ -8,7 +10,7 @@ module CoxPH (
   ) where
 
 import CoxPH.CenterAndScale (centerAndScaleCovs)
-import CoxPH.CoxPHUpdateNewtonRaphson ( NRResults(..), TTEData(..), coxPHUpdateNewtonRaphson, NRTerms (logLikelihood) )
+import CoxPH.CoxPHUpdateNewtonRaphson ( NRResults(..), TTEData(..), coxPHUpdateNewtonRaphson )
 import CoxPH.Data
 import Data.Vector.Storable qualified as VS
 import Data.Vector qualified as V
@@ -48,8 +50,7 @@ coxph times
   centeredAndScaledCovsResults <- centerAndScaleCovs xDesignDataFrame
                                                      weights
                                                      scaleIndicators
-  let updateStepPartial = updateStep maxIterations epsilon
-      centeredAndScaledCovs = V.map fst centeredAndScaledCovsResults
+  let centeredAndScaledCovs = V.map fst centeredAndScaledCovsResults
       -- scales = V.map snd centeredAndScaledCovsResults
       xDesignMatrix = L.fromColumns (V.toList centeredAndScaledCovs)
       tteData = TTEData
@@ -62,29 +63,46 @@ coxph times
         , tiesMethod = tiesMethod
         }
   (betaOffset, nrResults) <- calcBetaOffset tteData
-  let currLogLikelihood = nrResults.sumLogLikelihood
-  Right (VS.fromList [])
+  let newBeta = L.add beta betaOffset
+  updateStep maxIterations
+             epsilon
+             2 -- we've done one iteration so far, so the next one will be the second
+             newBeta
+             xOffset
+             nrResults.sumLogLikelihood
+             (updateTTEData newBeta xOffset tteData)
 
-updateStep :: Int -> Double -> Int -> Double -> TTEData -> Either T.Text (VS.Vector Double)
-updateStep maxIterations epsilon iteration logLikelihood tteData
+updateStep :: Int -> Double -> Int -> VS.Vector Double -> VS.Vector Double -> Double -> TTEData -> Either T.Text (VS.Vector Double)
+updateStep maxIterations epsilon iteration beta xOffset logLikelihood tteData
   | iteration > maxIterations =
     Left "Did not converge in the alloted number of iterations"
   | otherwise =
     case calcBetaOffset tteData of
       Left e -> Left e
       Right (betaOffset, nrResults) ->
-        if nrResults.sumLogLikelihood < logLikelihood
-        then Left "Likelihood not nondecreasing"
-        else Right (VS.replicate 0 0)
+        let newBeta = L.add beta betaOffset
+        in     -- Case: we've achieved convergence
+            if | checkNRConvergence epsilon logLikelihood nrResults ->
+                 Right newBeta
+               -- Case: the logLikelihood is moving in the wrong direction
+               | checkDecreasingLogLikelihood logLikelihood nrResults ->
+                 Left "Likelihood not nondecreasing"
+               -- Case: we haven't achieved convergence yet, but the log
+               -- likelihood is moving in the right direction
+               | otherwise ->
+                 updateStep maxIterations
+                            epsilon
+                            (iteration + 1)
+                            newBeta
+                            xOffset
+                            nrResults.sumLogLikelihood
+                            (updateTTEData newBeta xOffset tteData)
 
--- -- calculates I^{-1}(\hat{\beta}^{(n)})\, U(\hat{\beta}^{(n)}), i.e. the term
--- -- that we add to \hat{\beta}^{(n)} to update it
--- calcBetaOffset :: TTEData -> Either T.Text (VS.Vector Double, NRResults)
--- calcBetaOffset tteData = do
---   let nrResults = coxPHUpdateNewtonRaphson tteData
---       inverseInformationMatrix = L.inv nrResults.informationMatrix  -- FIXME: this can fail. Need to catch failure as appropriate
---       betaOffset = inverseInformationMatrix L.#> nrResults.score
---   Right (betaOffset, nrResults)
+updateTTEData :: VS.Vector Double -> VS.Vector Double -> TTEData -> TTEData
+updateTTEData beta xOffset tteData =
+  let newXProdBeta = L.add xOffset
+                           (tteData.xDesignMatrix L.#> beta)
+  in  tteData { xProdBeta = newXProdBeta }
 
 -- calculates I^{-1}(\hat{\beta}^{(n)})\, U(\hat{\beta}^{(n)}), i.e. the term
 -- that we add to \hat{\beta}^{(n)} to update it
@@ -94,3 +112,11 @@ calcBetaOffset tteData = do
       inverseInformationMatrix = L.inv nrResults.informationMatrix  -- FIXME: this can fail. Need to catch failure as appropriate
       betaOffset = inverseInformationMatrix L.#> nrResults.score
   Right (betaOffset, nrResults)
+
+checkNRConvergence :: Double -> Double -> NRResults -> Bool
+checkNRConvergence epsilon logLikelihood nrResults =
+  abs (1 - (logLikelihood / nrResults.sumLogLikelihood)) < epsilon
+
+checkDecreasingLogLikelihood :: Double -> NRResults -> Bool
+checkDecreasingLogLikelihood logLikelihood nrResults =
+  logLikelihood >= nrResults.sumLogLikelihood
