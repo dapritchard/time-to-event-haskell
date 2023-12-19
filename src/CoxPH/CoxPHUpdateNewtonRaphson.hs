@@ -41,8 +41,8 @@ data NRResults = NRResults
   , informationMatrix :: Matrix Double
   }
 
-calcNRResults :: TTEData -> NRResults
-calcNRResults tteData =
+coxPHUpdateNewtonRaphson :: TTEData -> NRResults
+coxPHUpdateNewtonRaphson tteData =
   let p = cols tteData.xDesignMatrix
       iterationInfo = IterationInfo
         { subjectIndex = VS.length tteData.time - 1
@@ -225,7 +225,7 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
           subjectXProdBeta = tteData.xProdBeta VS.! iterationInfo.subjectIndex
           subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
           -- subjectXRow = tteData.xDesignMatrix VS.! iterationInfo.subjectIndex
-          subjectXRow = VS.replicate 5 0
+          subjectXRow = VS.replicate 5 0 -- FIXME
           weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
                                       (outer subjectXRow subjectXRow)
