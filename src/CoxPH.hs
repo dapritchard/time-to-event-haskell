@@ -12,9 +12,9 @@ module CoxPH (
 import CoxPH.CenterAndScale (centerAndScaleCovs)
 import CoxPH.CoxPHUpdateNewtonRaphson ( NRResults(..), TTEData(..), coxPHUpdateNewtonRaphson )
 import CoxPH.Data
-import Data.Vector.Storable qualified as VS
-import Data.Vector qualified as V
 import Data.Text qualified as T
+import Data.Vector qualified as V
+import Data.Vector.Storable qualified as VS
 import Numeric.LinearAlgebra qualified as L
 
 -- type CoxPHResult = Either CoxPHConvergenceFailure (VU.Vector Double)
@@ -121,53 +121,3 @@ checkNRConvergence epsilon logLikelihood nrResults =
 checkDecreasingLogLikelihood :: Double -> NRResults -> Bool
 checkDecreasingLogLikelihood logLikelihood nrResults =
   logLikelihood >= nrResults.sumLogLikelihood
-
-result :: CoxPHResult
-result = coxph (VS.fromList [1, 1, 2, 2, 3, 3, 4]) -- times
-               (V.fromList [ObservedEvent, Censored, ObservedEvent, ObservedEvent, ObservedEvent, Censored, ObservedEvent])
-               (V.fromList [ VS.fromList [1, 1, 1, 0, 2, 0, 0]
-                           , VS.fromList [0, 0, 1, 1, 0, 1, 0]
-                           ]) -- xDesignDataFrame
-               (VS.fromList [0, 0, 0, 0, 0, 0, 0]) -- xOffset
-               (VS.fromList [1, 1, 1, 1, 1, 1, 1]) -- weights
-               (VS.fromList [0, 0, 0, 0, 0, 0, 0]) -- strata
-               (VS.fromList [0, 0]) -- beta
-               (V.fromList [ScaleCovariateYes, ScaleCovariateNo]) -- scaleIndicators
-               Breslow -- tiesMethod
-               20 -- maxIterations
-               0.000000000001818989 -- epsilon
-
--- data Delta = ObservedEvent | Censored
-
--- Browse[2]> > as.integer(maxiter)
--- [1] 20
--- Browse[2]> stime
--- [1] 1 1 2 2 3 3 4
--- Browse[2]> sstat
--- [1] 1 0 1 1 1 0 1
--- Browse[2]> > x[sorted,]
---   x sex
--- 3 1   0
--- 4 1   0
--- 5 1   1
--- 6 0   1
--- 2 2   0
--- 7 0   1
--- 1 0   0
--- Browse[2]> > as.double(offset[sorted])
--- [1] 0 0 0 0 0 0 0
--- Browse[2]> weights
--- [1] 1 1 1 1 1 1 1
--- Browse[2]> newstrat
--- [1] 0 0 0 0 0 0 0
--- Browse[2]> > as.integer(method=="efron")
--- [1] 0
--- Browse[2]> > as.double(control$eps)
--- [1] 0.000000001
--- Browse[2]> > as.double(control$toler.chol)
--- [1] 0.000000000001818989
--- Browse[2]> > as.vector(init)
--- [1] 0 0
--- Browse[2]> > ifelse(zero.one, 0L, 1L)
---   x sex
---   1   0
