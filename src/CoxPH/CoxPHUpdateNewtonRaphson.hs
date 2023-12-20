@@ -6,6 +6,7 @@ module CoxPH.CoxPHUpdateNewtonRaphson where
 
 import CoxPH.Data
 import Numeric.LinearAlgebra ( Matrix, add, cols, diag, outer, scale )
+import Numeric.LinearAlgebra.Data qualified as LD
 import Data.Vector.Storable qualified as VS
 import Data.Vector qualified as V
 
@@ -224,8 +225,7 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
       let subjectWeight = tteData.weights VS.! iterationInfo.subjectIndex
           subjectXProdBeta = tteData.xProdBeta VS.! iterationInfo.subjectIndex
           subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
-          -- subjectXRow = tteData.xDesignMatrix VS.! iterationInfo.subjectIndex
-          subjectXRow = VS.replicate 5 0 -- FIXME
+          subjectXRow = tteData.xDesignMatrix LD.! iterationInfo.subjectIndex
           weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
                                       (outer subjectXRow subjectXRow)

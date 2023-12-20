@@ -25,7 +25,7 @@ coxph :: VS.Vector Double                  -- length n, the per-subject minumum 
       -> V.Vector (VS.Vector Double)       -- dimension n by p, X design matrix
       -> VS.Vector Double                  -- length n, X offset vector
       -> VS.Vector Double                  -- length n, subject weights
-      -> VS.Vector Int                     -- length n, indicators for whether a patient had the latest minumum event of censoring time within a strata
+      -> VS.Vector Int                     -- length n, strata
       -> VS.Vector Double                  -- length p, starting values for the beta coefficients
       -> V.Vector ScaleCovariateIndicator  -- length p, indicators for whether a given covariate should be centered and scaled
       -> CoxPHMethod                       -- which of the Breslow or Effron methods to use in the event of tied event times
@@ -38,7 +38,7 @@ coxph times
       xDesignDataFrame
       xOffset
       weights
-      stratums
+      strata
       beta
       scaleIndicators
       tiesMethod
@@ -50,27 +50,28 @@ coxph times
   centeredAndScaledCovsResults <- centerAndScaleCovs xDesignDataFrame
                                                      weights
                                                      scaleIndicators
-  let centeredAndScaledCovs = V.map fst centeredAndScaledCovsResults
+  let (centeredAndScaledCovs, scales) = V.unzip centeredAndScaledCovsResults
       -- scales = V.map snd centeredAndScaledCovsResults
       xDesignMatrix = L.fromColumns (V.toList centeredAndScaledCovs)
       tteData = TTEData
         { time = times
         , eventStatus = eventStatuses
         , xDesignMatrix = xDesignMatrix
-        , stratum = stratums
+        , stratum = strata
         , weights = weights
         , xProdBeta = L.add xOffset (xDesignMatrix L.#> beta)
         , tiesMethod = tiesMethod
         }
   (betaOffset, nrResults) <- calcBetaOffset tteData
   let newBeta = L.add beta betaOffset
-  updateStep maxIterations
-             epsilon
-             2 -- we've done one iteration so far, so the next one will be the second
-             newBeta
-             xOffset
-             nrResults.sumLogLikelihood
-             (updateTTEData newBeta xOffset tteData)
+  finalBeta <- updateStep maxIterations
+                     epsilon
+                     2 -- since we've manually done one iteration so far
+                     newBeta
+                     xOffset
+                     nrResults.sumLogLikelihood
+                     (updateTTEData newBeta xOffset tteData)
+  Right (VS.convert scales / finalBeta)
 
 updateStep :: Int -> Double -> Int -> VS.Vector Double -> VS.Vector Double -> Double -> TTEData -> Either T.Text (VS.Vector Double)
 updateStep maxIterations epsilon iteration beta xOffset logLikelihood tteData
@@ -81,8 +82,8 @@ updateStep maxIterations epsilon iteration beta xOffset logLikelihood tteData
       Left e -> Left e
       Right (betaOffset, nrResults) ->
         let newBeta = L.add beta betaOffset
-        in     -- Case: we've achieved convergence
-            if | checkNRConvergence epsilon logLikelihood nrResults ->
+        in  if -- Case: we've achieved convergence;
+               | checkNRConvergence epsilon logLikelihood nrResults ->
                  Right newBeta
                -- Case: the logLikelihood is moving in the wrong direction
                | checkDecreasingLogLikelihood logLikelihood nrResults ->
