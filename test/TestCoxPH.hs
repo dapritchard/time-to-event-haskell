@@ -4,7 +4,7 @@ module Main (main) where
 
 import Control.Monad ( unless )
 import CoxPH.CenterAndScale
-import TestCoxPH.TestCoxPHUpdateNewtonRaphson
+import TestCoxPH.TestCoxPHUpdateNewtonRaphson ()
 import CoxPH.Data
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS

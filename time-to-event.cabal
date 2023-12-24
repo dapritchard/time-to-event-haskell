@@ -46,7 +46,7 @@ test-suite time-to-event-test
     import:           warnings, extensions
     default-language: GHC2021
     other-modules:
-        -- TestCoxPH.TestCoxPHUpdateNewtonRaphson
+        TestCoxPH.TestCoxPHUpdateNewtonRaphson
     -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
