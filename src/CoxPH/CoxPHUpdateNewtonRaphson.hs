@@ -16,6 +16,7 @@ data IterationInfo = IterationInfo
   , stratum :: Int
   , nEvents :: Int
   }
+  deriving Show
 
 data TTEData = TTEData
   { time :: VS.Vector Double
@@ -26,6 +27,7 @@ data TTEData = TTEData
   , xProdBeta :: VS.Vector Double
   , tiesMethod :: CoxPHMethod
   }
+  deriving Show
 
 data NRTerms = NRTerms
   { sumWeights :: Double
@@ -35,12 +37,14 @@ data NRTerms = NRTerms
   , xBarUnscaled :: VS.Vector Double
   , informationTerm1 :: Matrix Double
   }
+  deriving Show
 
 data NRResults = NRResults
   { sumLogLikelihood :: Double
   , score :: VS.Vector Double
   , informationMatrix :: Matrix Double
   }
+  deriving Show
 
 coxPHUpdateNewtonRaphson :: TTEData -> NRResults
 coxPHUpdateNewtonRaphson tteData =
