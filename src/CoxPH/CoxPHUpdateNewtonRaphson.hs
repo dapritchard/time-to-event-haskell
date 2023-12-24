@@ -78,12 +78,12 @@ calcStrata tteData iterationInfo nrResults
   | otherwise =
     let p = VS.length nrResults.score
         initialIterationInfo = resetIterationInfo iterationInfo
-        initialNRTerms = createInitialData p
+        initialOverallData = createInitialData p
         initialInformation = createEmptyMatrix p
         (newIterationInfo, newNRTerms, informationMatrix) =
           calcTimeBlocks tteData
                          initialIterationInfo
-                         initialNRTerms
+                         initialOverallData
                          initialInformation
         aggregatedNRResults = aggregateNRResults nrResults
                                                  newNRTerms
@@ -131,7 +131,7 @@ calcTimeBlocks tteData iterationInfo overallData informationMatrix
   | otherwise =
       let p = VS.length overallData.score
           initialTiedData = createInitialData p
-          initialIterationInfo = initializeIterationInfo iterationInfo
+          initialIterationInfo = resetIterationInfo iterationInfo
           (timeBlockIterationInfo, timeBlockNRTerms, timeBlockTiedData) =
             calcTimeBlocksSubjects tteData
                                    initialIterationInfo
@@ -150,8 +150,8 @@ calcTimeBlocks tteData iterationInfo overallData informationMatrix
                          newNRTerms
                          newInformationMatrix
   where
-    initializeIterationInfo :: IterationInfo -> IterationInfo
-    initializeIterationInfo iterationInfo =
+    resetIterationInfo :: IterationInfo -> IterationInfo
+    resetIterationInfo iterationInfo =
       IterationInfo
         { subjectIndex = iterationInfo.subjectIndex
         , time = tteData.time VS.! iterationInfo.subjectIndex
