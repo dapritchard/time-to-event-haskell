@@ -17,8 +17,8 @@ import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
 import Numeric.LinearAlgebra qualified as L
 
--- type CoxPHResult = Either CoxPHConvergenceFailure (VU.Vector Double)
-type CoxPHResult = Either T.Text (VS.Vector Double)
+-- -- type CoxPHResult = Either CoxPHConvergenceFailure (VU.Vector Double)
+-- type CoxPHResult = Either T.Text (VS.Vector Double)
 
 coxph :: VS.Vector Double                  -- length n, the per-subject minumum times of the event or censoring times
       -> V.Vector Delta                    -- length n, indicators for whether patient observered an event or censoring
@@ -32,7 +32,7 @@ coxph :: VS.Vector Double                  -- length n, the per-subject minumum 
       -> Int                               -- the maximumn number of Newton-Rhapson iterations to perform
       -> Double                            -- the value for which the absolute value of 1 minus ratio of the likelihood for two consecutive iterations must be below for convergence to be achieved
       -- -> Double                            -- TODO
-      -> CoxPHResult
+      -> Either T.Text (VS.Vector Double)
 coxph times
       eventStatuses
       xDesignDataFrame
@@ -65,12 +65,12 @@ coxph times
   (betaOffset, nrResults) <- calcBetaOffset tteData
   let newBeta = L.add beta betaOffset
   finalBeta <- updateStep maxIterations
-                     epsilon
-                     2 -- since we've manually done one iteration so far
-                     newBeta
-                     xOffset
-                     nrResults.sumLogLikelihood
-                     (updateTTEData newBeta xOffset tteData)
+                          epsilon
+                          2 -- since we've manually done one iteration so far
+                          newBeta
+                          xOffset
+                          nrResults.sumLogLikelihood
+                          (updateTTEData newBeta xOffset tteData)
   Right (VS.convert scales / finalBeta)
 
 updateStep :: Int -> Double -> Int -> VS.Vector Double -> VS.Vector Double -> Double -> TTEData -> Either T.Text (VS.Vector Double)
@@ -86,10 +86,10 @@ updateStep maxIterations epsilon iteration beta xOffset logLikelihood tteData
                | checkNRConvergence epsilon logLikelihood nrResults ->
                  Right newBeta
                -- Case: the logLikelihood is moving in the wrong direction
-               | checkDecreasingLogLikelihood logLikelihood nrResults ->
-                 Left "Likelihood not nondecreasing"
-               -- Case: we haven't achieved convergence yet, but the log
-               -- likelihood is moving in the right direction
+               -- | checkDecreasingLogLikelihood logLikelihood nrResults ->
+               --   Left "Likelihood not nondecreasing"
+               -- -- Case: we haven't achieved convergence yet, but the log
+               -- -- likelihood is moving in the right direction
                | otherwise ->
                  updateStep maxIterations
                             epsilon

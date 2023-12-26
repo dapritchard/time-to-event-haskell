@@ -238,12 +238,13 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
                                       (outer subjectXRow subjectXRow)
       in  case tteData.eventStatus V.! iterationInfo.subjectIndex of
             Censored ->
-              let newNRTerms = overallData
+              let newOverallData = overallData
                     { sumWeightedRisk = overallData.sumWeightedRisk
                                         + subjectWeightedRisk
                     , xBarUnscaled = add overallData.xBarUnscaled
                                          weightedSubjectXRow
-                    , informationTerm1 = newInformationTerm1
+                    , informationTerm1 = add overallData.informationTerm1
+                                             newInformationTerm1
                     }
                   newIterationInfo = iterationInfo
                     { subjectIndex = iterationInfo.subjectIndex - 1
@@ -251,7 +252,7 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
               in  calcTimeBlocksSubjects
                     tteData
                     newIterationInfo
-                    newNRTerms
+                    newOverallData
                     tiedData
             ObservedEvent ->
               let newTiedData = tiedData
