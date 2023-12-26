@@ -177,19 +177,22 @@ computeBreslow iterationInfo overallData tiedData informationMatrix
         newXBarUnscaled = add overallData.xBarUnscaled
                               tiedData.xBarUnscaled
         newXBar = scale (1 / newSumWeightedRisk) newXBarUnscaled
+        newInformationTerm1 = add overallData.informationTerm1
+                                  tiedData.informationTerm1
         newNRTerms = NRTerms
           { sumWeights = 0
           , sumWeightedRisk = newSumWeightedRisk
           , logLikelihood = overallData.logLikelihood
                             + tiedData.logLikelihood
                             - (tiedData.sumWeights * log newSumWeightedRisk)
-          , score = add overallData.score (scale (- tiedData.sumWeights) newXBar)
+          , score = add overallData.score
+                        (add tiedData.score
+                             (scale (- 1 / tiedData.sumWeights) newXBar))
           , xBarUnscaled = newXBarUnscaled
-          , informationTerm1 = add overallData.informationTerm1
-                                   tiedData.informationTerm1
+          , informationTerm1 = newInformationTerm1
           }
         blockInformation = scale (tiedData.sumWeights / newSumWeightedRisk)
-                                 (add newNRTerms.informationTerm1
+                                 (add newInformationTerm1
                                       (scale (- newSumWeightedRisk)
                                              (outer newXBar newXBar)))
         newInformationMatrix = add informationMatrix blockInformation
