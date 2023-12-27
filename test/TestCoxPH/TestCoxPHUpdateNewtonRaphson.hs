@@ -91,7 +91,7 @@ scaleIndicators = V.fromList [ScaleCovariateYes, ScaleCovariateNo]
 testTiesMethod :: CoxPHMethod
 testTiesMethod = Breslow
 maxIterations :: Int
-maxIterations = 200
+maxIterations = 20
 epsilon :: Double
 epsilon = 0.000000000001818989
 
@@ -107,16 +107,6 @@ out = coxph times
             testTiesMethod
             maxIterations
             epsilon
-
--- firstUpdate :: Either T.Text (L.Vector Double)
--- firstUpdate = updateStep 20
---                          0.00000001
---                          2
---                          (VS.fromList [0, 0])
---                          (VS.fromList [0, 0])
---                          (- 10.0)
---                          tteData
-
 
 -- times :: VS.Vector Double
 -- times = VS.fromList [1, 1, 2, 2, 3, 3, 4]
@@ -174,42 +164,44 @@ tteData = TTEData
   , tiesMethod = testTiesMethod
   }
 
+tteData0 :: TTEData
+tteData0 = tteData
 nrResults0 :: NRResults
-nrResults0 = coxPHUpdateNewtonRaphson tteData
+nrResults0 = coxPHUpdateNewtonRaphson tteData0
 inverseInformationMatrix0 :: L.Matrix Double
 inverseInformationMatrix0 = L.inv nrResults0.informationMatrix
 beta1 :: L.Vector Double
 beta1 = inverseInformationMatrix0 L.#> nrResults0.score
 
 tteData1 :: TTEData
-tteData1 = tteData { xProdBeta = tteData.xDesignMatrix L.#> beta1 }
+tteData1 = tteData0 { xProdBeta = tteData0.xDesignMatrix L.#> beta1 }
 nrResults1 :: NRResults
 nrResults1 = coxPHUpdateNewtonRaphson tteData1
 inverseInformationMatrix1 :: L.Matrix Double
 inverseInformationMatrix1 = L.inv nrResults1.informationMatrix
 beta2 :: L.Vector Double
 beta2 = L.add beta1
-              (inverseInformationMatrix1 L.#> nrResults0.score)
+              (inverseInformationMatrix1 L.#> nrResults1.score)
 
 tteData2 :: TTEData
-tteData2 = tteData { xProdBeta = tteData.xDesignMatrix L.#> beta2 }
+tteData2 = tteData1 { xProdBeta = tteData1.xDesignMatrix L.#> beta2 }
 nrResults2 :: NRResults
 nrResults2 = coxPHUpdateNewtonRaphson tteData2
 inverseInformationMatrix2 :: L.Matrix Double
-inverseInformationMatrix2 = L.inv nrResults1.informationMatrix
+inverseInformationMatrix2 = L.inv nrResults2.informationMatrix
 beta3 :: L.Vector Double
 beta3 = L.add beta2
-              (inverseInformationMatrix1 L.#> nrResults0.score)
+              (inverseInformationMatrix2 L.#> nrResults2.score)
 
 tteData3 :: TTEData
-tteData3 = tteData { xProdBeta = tteData.xDesignMatrix L.#> beta3 }
+tteData3 = tteData2 { xProdBeta = tteData2.xDesignMatrix L.#> beta3 }
 nrResults3 :: NRResults
 nrResults3 = coxPHUpdateNewtonRaphson tteData3
 inverseInformationMatrix3 :: L.Matrix Double
-inverseInformationMatrix3 = L.inv nrResults1.informationMatrix
+inverseInformationMatrix3 = L.inv nrResults3.informationMatrix
 beta4 :: L.Vector Double
 beta4 = L.add beta3
-              (inverseInformationMatrix1 L.#> nrResults0.score)
+              (inverseInformationMatrix3 L.#> nrResults3.score)
 
 -- -- Patient 6
 -- (IterationInfo {subjectIndex = 5, time = 7.0, stratum = 0, nEvents = 1},NRTerms {sumWeights = 0.0, sumWeightedRisk = 0.0, logLikelihood = 0.0, score = [0.0,0.0], xBarUnscaled = [0.0,0.0], informationTerm1 = (2><2)
@@ -336,6 +328,66 @@ out0 = calcTimeBlocks tteDataT0
                       ((fst3 out1) { subjectIndex = 0 })
                       (snd3 out1)
                       (thd3 out1)
+
+beta11 :: L.Vector Double
+beta11 = VS.fromList [1, 1]
+
+tteDataT6B11 :: TTEData
+tteDataT6B11 = TTEData
+  { time = tteData.time `VS.backpermute` VS.fromList [6]
+  , eventStatus = eventStatuses `V.backpermute` V.fromList [6]
+  , xDesignMatrix = testXDesignMatrix L.? [6]
+  , stratum = strata `VS.backpermute` VS.fromList [6]
+  , weights = testWeights `VS.backpermute` VS.fromList [6]
+  , xProdBeta = L.add xOffset (testXDesignMatrix L.#> beta11) `VS.backpermute` VS.fromList [6]
+  , tiesMethod = testTiesMethod
+  }
+
+out6B11 :: (IterationInfo, NRTerms, L.Matrix Double)
+out6B11 = calcTimeBlocks tteDataT6B11
+                         (IterationInfo 0 0 0 0)
+                         (createInitialData 2)
+                         (createEmptyMatrix 2)
+
+tteDataT5B11 :: TTEData
+tteDataT5B11 = TTEData
+  { time = tteData.time `VS.backpermute` VS.fromList [5]
+  , eventStatus = eventStatuses `V.backpermute` V.fromList [5]
+  , xDesignMatrix = testXDesignMatrix L.? [5]
+  , stratum = strata `VS.backpermute` VS.fromList [5]
+  , weights = testWeights `VS.backpermute` VS.fromList [5]
+  , xProdBeta = L.add xOffset (testXDesignMatrix L.#> beta11) `VS.backpermute` VS.fromList [5]
+  , tiesMethod = testTiesMethod
+  }
+
+out5B11 :: (IterationInfo, NRTerms, L.Matrix Double)
+out5B11 = calcTimeBlocks tteDataT5B11
+                         ((fst3 out6B11) { subjectIndex = 0 })
+                         (snd3 out6B11)
+                         (thd3 out6B11)
+
+tteDataT4B11 :: TTEData
+tteDataT4B11 = TTEData
+  { time = tteData.time `VS.backpermute` VS.fromList [4]
+  , eventStatus = eventStatuses `V.backpermute` V.fromList [4]
+  , xDesignMatrix = testXDesignMatrix L.? [4]
+  , stratum = strata `VS.backpermute` VS.fromList [4]
+  , weights = testWeights `VS.backpermute` VS.fromList [4]
+  , xProdBeta = L.add xOffset (testXDesignMatrix L.#> beta11) `VS.backpermute` VS.fromList [4]
+  , tiesMethod = testTiesMethod
+  }
+
+out4B11 :: (IterationInfo, NRTerms, L.Matrix Double)
+out4B11 = calcTimeBlocks tteDataT4B11
+                         ((fst3 out5B11) { subjectIndex = 0 })
+                         (snd3 out5B11)
+                         (thd3 out5B11)
+
+-- outPass1 :: (IterationInfo, NRTerms, L.Matrix Double)
+-- outPass = calcTimeBlocks tteDataT6
+--                       (IterationInfo 0 0 0 0)
+--                       (createInitialData 2)
+--                       (createEmptyMatrix 2)
 
 fst3 :: (a, b, c) -> a
 fst3 (a, _, _) = a

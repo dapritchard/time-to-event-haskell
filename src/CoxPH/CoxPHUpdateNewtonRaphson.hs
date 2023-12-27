@@ -167,7 +167,7 @@ computeBreslow
   -> (NRTerms, Matrix Double)
 computeBreslow iterationInfo overallData tiedData informationMatrix
   | iterationInfo.nEvents == 0 =
-    let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood
+    let newLogLikelihood = overallData.logLikelihood + tiedData.logLikelihood -- TODO: is there any need to update @overallData@ at all?
         newNRTerms = (overallData :: NRTerms) { logLikelihood = newLogLikelihood }
     in  (newNRTerms, informationMatrix)
   | otherwise =
@@ -187,7 +187,7 @@ computeBreslow iterationInfo overallData tiedData informationMatrix
                             - (tiedData.sumWeights * log newSumWeightedRisk)
           , score = add overallData.score
                         (add tiedData.score
-                             (scale (- 1 / tiedData.sumWeights) newXBar))
+                             (scale (- tiedData.sumWeights) newXBar))
           , xBarUnscaled = newXBarUnscaled
           , informationTerm1 = newInformationTerm1
           }
@@ -233,7 +233,7 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
           subjectXProdBeta = tteData.xProdBeta VS.! iterationInfo.subjectIndex
           subjectWeightedRisk = subjectWeight * exp subjectXProdBeta
           subjectXRow = tteData.xDesignMatrix LD.! iterationInfo.subjectIndex
-          weightedSubjectXRow = scale subjectWeightedRisk subjectXRow
+          subjectWeightedXRow = scale subjectWeightedRisk subjectXRow
           newInformationTerm1 = scale subjectWeightedRisk
                                       (outer subjectXRow subjectXRow)
       in  case tteData.eventStatus V.! iterationInfo.subjectIndex of
@@ -242,7 +242,7 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
                     { sumWeightedRisk = overallData.sumWeightedRisk
                                         + subjectWeightedRisk
                     , xBarUnscaled = add overallData.xBarUnscaled
-                                         weightedSubjectXRow
+                                         subjectWeightedXRow
                     , informationTerm1 = add overallData.informationTerm1
                                              newInformationTerm1
                     }
@@ -261,9 +261,9 @@ calcTimeBlocksSubjects tteData iterationInfo overallData tiedData
                                         + subjectWeightedRisk
                     , logLikelihood = tiedData.logLikelihood
                                       + (subjectWeight * subjectXProdBeta) -- TODO: split this into logLikelihoodTerm1 and logLikelihoodTerm2?
-                    , score = add tiedData.score weightedSubjectXRow
+                    , score = add tiedData.score (scale subjectWeight subjectXRow)
                     , xBarUnscaled = add tiedData.xBarUnscaled
-                                         weightedSubjectXRow
+                                         subjectWeightedXRow
                     , informationTerm1 = newInformationTerm1
                     }
                   newIterationInfo = iterationInfo
