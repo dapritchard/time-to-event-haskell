@@ -90,10 +90,7 @@ updateStep :: Int -> Double -> Int -> VS.Vector Double -> VS.Vector Double -> Do
 updateStep maxIterations epsilon iteration beta xOffset logLikelihood tteData
     | iteration > maxIterations =
         Left "Did not converge in the alloted number of iterations"
-    | otherwise =
-        case calcBetaOffset tteData of
-            Left e -> Left e
-            Right (betaOffset, nrResults) ->
+    | otherwise = calcBetaOffset tteData >>= \(betaOffset, nrResults) ->
                 let newBeta = L.add beta betaOffset
                  in if checkNRConvergence epsilon logLikelihood nrResults
                         then -- Case: we've achieved convergence;
