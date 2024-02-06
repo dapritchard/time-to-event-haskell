@@ -62,7 +62,7 @@ centerAndScaleCov x weights mean sumWeights
     | otherwise =
         let xCentered = VS.map (subtract mean) x
             covariatePairs = VU.zip (VU.convert xCentered) (VU.convert weights)
-            weightedAbsCovSum = VU.foldl calcAbsProd 0 covariatePairs
+            weightedAbsCovSum = VU.foldl' calcAbsProd 0 covariatePairs
          in if weightedAbsCovSum == 0
                 then Left "Constant column"
                 else
