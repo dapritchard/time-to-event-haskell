@@ -80,19 +80,9 @@ calcWeightedMeans ::
     VS.Vector Double ->
     V.Vector ScaleCovariateIndicator ->
     Either T.Text (VS.Vector Double)
-calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators = do
-    let covariatePairs = V.zip xDesignMatrix scaleIndicators
-        eitherMeans =
-            V.map
-                (conditionallyCalcWeightedMean weights)
-                covariatePairs
-        errorCovs = V.filter isLeft eitherMeans
-    if V.length errorCovs >= 1
-        then -- The conditional statement makes the `Right` case unreachable
-        case V.head errorCovs of
-            Left x -> Left x
-            Right x -> Right (VS.singleton x)
-        else Right (VS.convert (V.map (fromRight 0) eitherMeans))
+calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators =
+    fmap VS.convert . traverse (conditionallyCalcWeightedMean weights) $
+        V.zip xDesignMatrix scaleIndicators
   where
     conditionallyCalcWeightedMean ::
         VS.Vector Double ->
