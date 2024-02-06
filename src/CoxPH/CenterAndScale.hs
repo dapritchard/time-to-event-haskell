@@ -37,10 +37,8 @@ centerAndScaleCovs xDesignMatrix weights scaleIndicators =
                             (V.convert weightedMeans)
                             (V.replicate nCovs sumWeights)
                             scaleIndicators
-                    eitherResults = V.map conditionallyCenterAndScaleCov covTuples
-                if V.any isLeft eitherResults
-                    then Left "Not all covariates where able to be centered and scaled"
-                    else Right $ V.map (fromRight (VS.singleton 0, 0)) eitherResults
+
+                traverse conditionallyCenterAndScaleCov covTuples
   where
     conditionallyCenterAndScaleCov (x, _, _, _, ScaleCovariateNo) =
         Right (x, 1)
