@@ -5,7 +5,6 @@ module CoxPH.CenterAndScale (
 ) where
 
 import CoxPH.Data
-import Data.Either (fromRight, isLeft)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
