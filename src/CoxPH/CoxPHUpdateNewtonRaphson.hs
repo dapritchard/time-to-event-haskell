@@ -77,24 +77,23 @@ calcStrata tteData iterationInfo nrResults
     -- Case: compute the remaining strata. We calculate all of the
     -- relevant terms for the current stratum  and recursively call `calcStrata` to
     -- conditionally compute the next stratum
-    | otherwise =
-        let p = VS.length nrResults.score
-            initialIterationInfo = resetIterationInfo iterationInfo
-            initialOverallData = createInitialData p
-            initialInformation = createEmptyMatrix p
-            (newIterationInfo, newNRTerms, informationMatrix) =
-                calcTimeBlocks
-                    tteData
-                    initialIterationInfo
-                    initialOverallData
-                    initialInformation
-            aggregatedNRResults =
-                aggregateNRResults
-                    nrResults
-                    newNRTerms
-                    informationMatrix
-         in calcStrata tteData newIterationInfo aggregatedNRResults
+    | otherwise = calcStrata tteData newIterationInfo aggregatedNRResults
   where
+    p = VS.length nrResults.score
+    initialIterationInfo = resetIterationInfo iterationInfo
+    initialOverallData = createInitialData p
+    initialInformation = createEmptyMatrix p
+    (newIterationInfo, newNRTerms, informationMatrix) =
+        calcTimeBlocks
+            tteData
+            initialIterationInfo
+            initialOverallData
+            initialInformation
+    aggregatedNRResults =
+        aggregateNRResults
+            nrResults
+            newNRTerms
+            informationMatrix
     resetIterationInfo :: IterationInfo -> IterationInfo
     resetIterationInfo iterationInfo =
         IterationInfo
@@ -135,30 +134,30 @@ calcTimeBlocks tteData iterationInfo overallData informationMatrix
     -- had an event at the current time, and recursively call
     -- `calcTimeBlocksSubjects` to conditionally compute the next time block
     | otherwise =
-        let p = VS.length overallData.score
-            initialTiedData = createInitialData p
-            initialIterationInfo = resetIterationInfo iterationInfo
-            (timeBlockIterationInfo, timeBlockNRTerms, timeBlockTiedData) =
-                calcTimeBlocksSubjects
-                    tteData
-                    initialIterationInfo
-                    overallData
-                    initialTiedData
-            aggregateData = case tteData.tiesMethod of
-                Breslow -> computeBreslow
-                Efron -> computeEfron
-            (newNRTerms, newInformationMatrix) =
-                aggregateData
-                    timeBlockIterationInfo
-                    timeBlockNRTerms
-                    timeBlockTiedData
-                    informationMatrix
-         in calcTimeBlocks
-                tteData
-                timeBlockIterationInfo
-                newNRTerms
-                newInformationMatrix
+        calcTimeBlocks
+            tteData
+            timeBlockIterationInfo
+            newNRTerms
+            newInformationMatrix
   where
+    p = VS.length overallData.score
+    initialTiedData = createInitialData p
+    initialIterationInfo = resetIterationInfo iterationInfo
+    (timeBlockIterationInfo, timeBlockNRTerms, timeBlockTiedData) =
+        calcTimeBlocksSubjects
+            tteData
+            initialIterationInfo
+            overallData
+            initialTiedData
+    aggregateData = case tteData.tiesMethod of
+        Breslow -> computeBreslow
+        Efron -> computeEfron
+    (newNRTerms, newInformationMatrix) =
+        aggregateData
+            timeBlockIterationInfo
+            timeBlockNRTerms
+            timeBlockTiedData
+            informationMatrix
     resetIterationInfo :: IterationInfo -> IterationInfo
     resetIterationInfo iterationInfo =
         IterationInfo
