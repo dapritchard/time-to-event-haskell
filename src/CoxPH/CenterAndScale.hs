@@ -101,7 +101,7 @@ calcWeightedMean x weights sumWeights
     | VS.length x == 0 = Left "Can't take the mean of a length-0 vector"
     | sumWeights == 0 = Left "Can't take the mean when the weights sum to 0"
     | otherwise =
-        let sumCovs = VU.foldl op 0 (VU.zip (VU.convert x) (VU.convert weights))
+        let sumCovs = VU.foldl' op 0 (VU.zip (VU.convert x) (VU.convert weights))
          in Right (sumCovs / sumWeights)
   where
     op :: Double -> (Double, Double) -> Double
