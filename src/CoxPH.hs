@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
-
 module CoxPH (
     CoxPHConvergenceFailure (..),
     CoxPHMethod (..),
@@ -97,15 +95,12 @@ updateStep maxIterations epsilon iteration beta xOffset logLikelihood tteData
             Left e -> Left e
             Right (betaOffset, nrResults) ->
                 let newBeta = L.add beta betaOffset
-                 in if
-                        | checkNRConvergence epsilon logLikelihood nrResults ->
+                 in if checkNRConvergence epsilon logLikelihood nrResults
+                        then -- Case: we've achieved convergence;
                             Right newBeta
-                        -- Case: the logLikelihood is moving in the wrong direction
-                        -- \| checkDecreasingLogLikelihood logLikelihood nrResults ->
-                        --   Left "Likelihood not nondecreasing"
-                        -- -- Case: we haven't achieved convergence yet, but the log
-                        -- -- likelihood is moving in the right direction
-                        | otherwise ->
+                        else -- Case: we haven't achieved convergence yet, but the log
+                             -- likelihood is moving in the right direction
+
                             updateStep
                                 maxIterations
                                 epsilon
