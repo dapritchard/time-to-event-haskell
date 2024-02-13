@@ -10,6 +10,7 @@ module CoxPH (
 import CoxPH.CenterAndScale (centerAndScaleCovs)
 import CoxPH.CoxPHUpdateNewtonRaphson (NRResults (..), TTEData (..), coxPHUpdateNewtonRaphson)
 import CoxPH.Data
+import Data.Bifunctor (first)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
@@ -40,7 +41,7 @@ coxph ::
     -- | the value for which the absolute value of 1 minus ratio of the likelihood for two consecutive iterations must be below for convergence to be achieved
     -- -> Double                            -- TODO
     Double ->
-    Either T.Text (VS.Vector Double)
+    Either (V.Vector T.Text) (VS.Vector Double)
 coxph
     times
     eventStatuses
@@ -73,17 +74,18 @@ coxph
                         , xProdBeta = L.add xOffset (xDesignMatrix L.#> beta)
                         , tiesMethod = tiesMethod
                         }
-            (betaOffset, nrResults) <- calcBetaOffset tteData
+            (betaOffset, nrResults) <- leftSingleton $ calcBetaOffset tteData
             let newBeta = L.add beta betaOffset
             finalBeta <-
-                updateStep
-                    maxIterations
-                    epsilon
-                    2 -- since we've manually done one iteration so far
-                    newBeta
-                    xOffset
-                    nrResults.sumLogLikelihood
-                    (updateTTEData newBeta xOffset tteData)
+                leftSingleton $
+                    updateStep
+                        maxIterations
+                        epsilon
+                        2 -- since we've manually done one iteration so far
+                        newBeta
+                        xOffset
+                        nrResults.sumLogLikelihood
+                        (updateTTEData newBeta xOffset tteData)
             Right (VS.convert scales / finalBeta)
 
 updateStep :: Int -> Double -> Int -> VS.Vector Double -> VS.Vector Double -> Double -> TTEData -> Either T.Text (VS.Vector Double)
@@ -128,3 +130,7 @@ calcBetaOffset tteData = do
 checkNRConvergence :: Double -> Double -> NRResults -> Bool
 checkNRConvergence epsilon logLikelihood nrResults =
     abs (1 - (logLikelihood / nrResults.sumLogLikelihood)) < epsilon
+
+-- | Utility for wrapping the 'Left' variant of @Either b a@ into a @V.'Vector'@.
+leftSingleton :: Either b a -> Either (V.Vector b) a
+leftSingleton = first V.singleton

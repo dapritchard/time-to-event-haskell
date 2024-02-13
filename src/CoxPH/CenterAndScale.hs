@@ -5,6 +5,7 @@ module CoxPH.CenterAndScale (
 ) where
 
 import CoxPH.Data
+import Data.Bifunctor (first)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Data.Vector.Storable qualified as VS
@@ -18,7 +19,7 @@ centerAndScaleCovs ::
     VS.Vector Double ->
     -- | Indicators for whether each of the covariates should be centered and scaled. It is required that the length of this vector is equal to the number of vectors in the design matrix.
     V.Vector ScaleCovariateIndicator ->
-    Either T.Text (V.Vector (VS.Vector Double, Double))
+    Either (V.Vector T.Text) (V.Vector (VS.Vector Double, Double))
 -- The error handling could be improved to (i) list all of the errors and (ii)
 -- to list the indices of the failing vectors
 centerAndScaleCovs xDesignMatrix weights scaleIndicators =
@@ -26,9 +27,10 @@ centerAndScaleCovs xDesignMatrix weights scaleIndicators =
         nScaleIndicators = V.length scaleIndicators
         sumWeights = VS.sum weights
      in if nCovs /= nScaleIndicators
-            then Left "The length of first input is not the same as the length of the third input"
+            then Left $ V.singleton "The length of first input is not the same as the length of the third input"
             else do
-                weightedMeans <- calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators
+                weightedMeans <-
+                    calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators
                 let covTuples =
                         V.zip5
                             xDesignMatrix
@@ -37,12 +39,15 @@ centerAndScaleCovs xDesignMatrix weights scaleIndicators =
                             (V.replicate nCovs sumWeights)
                             scaleIndicators
 
-                traverse conditionallyCenterAndScaleCov covTuples
+                collectEither $
+                    V.partitionWith (uncurry conditionallyCenterAndScaleCov) $
+                        V.indexed covTuples
   where
-    conditionallyCenterAndScaleCov (x, _, _, _, ScaleCovariateNo) =
+    conditionallyCenterAndScaleCov _ (x, _, _, _, ScaleCovariateNo) =
         Right (x, 1)
-    conditionallyCenterAndScaleCov (x, weights, mean, sumWeights, ScaleCovariateYes) =
-        centerAndScaleCov x weights mean sumWeights
+    conditionallyCenterAndScaleCov idx (x, weights, mean, sumWeights, ScaleCovariateYes) =
+        first (\err -> "Column " <> T.pack (show idx) <> ":" <> err) $
+            centerAndScaleCov x weights mean sumWeights
 
 centerAndScaleCov ::
     VS.Vector Double ->
@@ -78,18 +83,21 @@ calcWeightedMeans ::
     V.Vector (VS.Vector Double) ->
     VS.Vector Double ->
     V.Vector ScaleCovariateIndicator ->
-    Either T.Text (VS.Vector Double)
+    Either (V.Vector T.Text) (VS.Vector Double)
 calcWeightedMeans sumWeights xDesignMatrix weights scaleIndicators =
-    fmap VS.convert . traverse (conditionallyCalcWeightedMean weights) $
-        V.zip xDesignMatrix scaleIndicators
+    fmap VS.convert . collectEither . V.partitionWith (uncurry (conditionallyCalcWeightedMean weights)) $
+        V.indexed $
+            V.zip xDesignMatrix scaleIndicators
   where
     conditionallyCalcWeightedMean ::
         VS.Vector Double ->
+        -- \| Column index.
+        Int ->
         (VS.Vector Double, ScaleCovariateIndicator) ->
         Either T.Text Double
-    conditionallyCalcWeightedMean _ (_, ScaleCovariateNo) = Right 0
-    conditionallyCalcWeightedMean weights (x, ScaleCovariateYes) =
-        calcWeightedMean x weights sumWeights
+    conditionallyCalcWeightedMean _ _ (_, ScaleCovariateNo) = Right 0
+    conditionallyCalcWeightedMean weights idx (x, ScaleCovariateYes) =
+        first (\err -> "Column " <> T.pack (show idx) <> ":" <> err) $ calcWeightedMean x weights sumWeights
 
 calcWeightedMean ::
     VS.Vector Double ->
@@ -105,6 +113,14 @@ calcWeightedMean x weights sumWeights
   where
     op :: Double -> (Double, Double) -> Double
     op sumCovs (covVal, weightVal) = sumCovs + covVal * weightVal
+
+{- | Helper to reshape the output of @V.'partitionWith'@. Takes a pair of vectors, 
+ - whose first element is a collection of errors, throwing 'Left' when any errors occurred. 
+-}
+collectEither :: (V.Vector b, V.Vector a) -> Either (V.Vector b) (V.Vector a)
+collectEither (verr, vres)
+    | V.null verr = Right vres
+    | otherwise = Left verr
 
 -- -- Possibly don't need ---------------------------------------------------------
 
